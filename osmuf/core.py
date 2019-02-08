@@ -231,3 +231,44 @@ def city_blocks(point, distance):
     # FUTURE NOTE - include a tare space dataframe in the return
     
     return (city_blocks_net, city_blocks_gross, city_blocks_gross_raw)
+
+def buildings_by_block(city_blocks_net):
+    
+    # project city_blocks_net back to geographic coordinates and then
+    # determine the boundary polygon to fetch buildings within
+    # maybe more efficient to generate boundary first then reproject second?
+    city_blocks_temp = ox.project_gdf(city_blocks_net, to_latlong=True)
+    boundary=city_blocks_temp.cascaded_union.convex_hull.buffer(0.000225)
+    
+    # download buildings
+    buildings_raw = ox.footprints_from_polygon(boundary)
+    
+    # create a filtered subset as a copy
+    buildings_filtered=buildings_raw[['building','building:levels','geometry']].copy()
+
+    # project the buildings to UTM
+    buildings_filtered = ox.project_gdf(buildings_filtered)
+
+    # convert 'building:levels' to float from object (int doesn't support NaN)
+    buildings_filtered['building:levels']=buildings_filtered['building:levels'].astype(float)
+
+    # generate footprint areas
+    buildings_filtered['footprint_m2']=buildings_filtered.area
+
+    # generate total_GEA
+    buildings_filtered['total_GEA_m2']=buildings_filtered.area*buildings_filtered['building:levels']
+
+    # where they intersect, add the city_block number onto each building
+    # how = 'left', 'right', 'inner' sets how the index of the new gdf is determined, left retains buildings index
+    # was 'intersects', 'contains', 'within'
+    buildings_with_blocks = gpd.sjoin(buildings_filtered, city_blocks_net[['geometry']], how="left", op='intersects')
+    buildings_with_blocks.rename(columns={'index_right' : 'block_id'}, inplace=True)
+
+    # filter out the buildings that are not associated with a city_block
+    buildings_with_blocks = buildings_with_blocks[buildings_with_blocks.block_id.notnull()]
+
+    # NOTES:
+    # convert 'building:levels' to int to get discrete colouring?
+    # tidy up use of block_id through the functions
+    
+    return buildings_with_blocks
