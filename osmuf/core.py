@@ -68,7 +68,7 @@ def circlizer(x):
 # circles with their areas (in hectares) centroids and regularity ratio
 def gdf_circlizer(gdf):
     # create a new gdf that includes the geometry of the old gdf and its area
-    new_gdf = gdf.filter(['area_ha_net', 'geometry'])
+    new_gdf = gdf.filter(['area_net_ha', 'geometry'])
     # replace the polygon geometry with the smallest enclosing circle
     new_gdf['geometry']=gdf['geometry'].apply(circlizer)
 
@@ -80,7 +80,7 @@ def gdf_circlizer(gdf):
 
     # calculate 'regularity' as "the ratio between the area of the block and
     # the area of the circumscribed circle C" Barthelemy M. and Louf R., (2014)
-    new_gdf['regularity'] = new_gdf['area_ha_net']/new_gdf['area_sec_ha']
+    new_gdf['regularity'] = new_gdf['area_net_ha']/new_gdf['area_sec_ha']
 
     return new_gdf
 
@@ -169,7 +169,7 @@ def graph_to_polygons(G, node_geometry=True, fill_edge_geometry=True):
 
     log('Created GeoDataFrame "{}" from graph in {:,.2f} seconds'.format(gdf_edges.gdf_name, time.time()-start_time))
     
-def city_blocks(point, distance):
+def city_blocks_from_point(point, distance):
     
     # may be better to take the highway network as an input so that it can also be used elsewhere for
     # e.g. connectivity assessment
@@ -185,7 +185,7 @@ def city_blocks(point, distance):
     # in geographic coordiantes
     boundary=place_polys.cascaded_union.convex_hull.buffer(0.000225)
     
-    # highway network - originally 'walk'
+    # highway network
     highway_network = ox.graph_from_polygon(boundary, network_type='all',
                                             simplify=True, retain_all=True, truncate_by_edge=True)
     
@@ -194,10 +194,10 @@ def city_blocks(point, distance):
     
     # create filtered copy of net_city_blocks
     place_polys = place_polys.loc[place_polys['place'] == 'city_block']
-    city_blocks_net = place_polys[['place','geometry']].copy()
+    city_blocks = place_polys[['place','geometry']].copy()
 
-    # project city_blocks_net to UTM
-    city_blocks_net = ox.project_gdf(city_blocks_net)
+    # project city_blocks to UTM
+    city_blocks = ox.project_gdf(city_blocks)
     
     # project the network to UTM & convert to undirected graph to remove
     # duplicates which make polygonization fail
@@ -208,7 +208,8 @@ def city_blocks(point, distance):
     # PROCESS NET CITY BLOCKS
     
     # calculate areas in hectares (not meters) and include as a column
-    city_blocks_net['area_ha_net'] = city_blocks_net.area/10000
+    city_blocks['area_net_ha'] = city_blocks.area/10000
+    city_blocks.index.name='block_id'
 
     
     # PROCESS GROSS CITY BLOCKS
@@ -218,40 +219,46 @@ def city_blocks(point, distance):
     city_blocks_gross_raw = graph_to_polygons(highway_network, node_geometry=False)
     
     # first, transfer attributes from city_blocks_net to city_blocks_gross where they intersect
-    city_blocks_gross = gpd.sjoin(city_blocks_gross_raw, city_blocks_net, how="left", op='intersects')
+    city_blocks_gross = gpd.sjoin(city_blocks_gross_raw, city_blocks, how="left", op='intersects')
     
-    # dissolve together city_blocks_gross polygons that intersect with the same city_blocks_net polygon
-    city_blocks_gross = city_blocks_gross.dissolve(by='index_right')
+    # dissolve together city_blocks_gross polygons that intersect with the same city_blocks polygon
+    city_blocks_gross.rename(columns={'index_right' : 'block_id'}, inplace=True)
+    # this can be tidied up, just needs to be the index as an integer, doesn't need a column name
+    city_blocks_gross = city_blocks_gross.dissolve(by='block_id')
+    city_blocks_gross.index = city_blocks_gross.index.astype(int)
     
     # calculate gross area in hectares (not meters) and include as a column in city_blocks_net
-    city_blocks_net['area_ha_gross'] = city_blocks_gross.area/10000
+    city_blocks['area_gross_ha'] = city_blocks_gross.area/10000
     # calculate the net to gross ratio for the blocks and include as a column in city_blocks_net
-    city_blocks_net['net_to_gross'] = round(city_blocks_net.area_ha_net/city_blocks_net.area_ha_gross, 2)
+    city_blocks['net_to_gross'] = round(city_blocks.area_net_ha/city_blocks.area_gross_ha, 2)
     
     # FUTURE NOTE - include a tare space dataframe in the return
     
-    return (city_blocks_net, city_blocks_gross, city_blocks_gross_raw)
+    return (city_blocks, city_blocks_gross, city_blocks_gross_raw)
 
-def buildings_by_block(city_blocks_net):
+def buildings_from_city_blocks(city_blocks):
     
-    # project city_blocks_net back to geographic coordinates and then
+    # project city_blocks_net back to geographic coordinates as footprints_from_polygon requires it
+    city_blocks_temp = ox.project_gdf(city_blocks, to_latlong=True)
     # determine the boundary polygon to fetch buildings within
-    # maybe more efficient to generate boundary first then reproject second?
-    city_blocks_temp = ox.project_gdf(city_blocks_net, to_latlong=True)
     boundary=city_blocks_temp.cascaded_union.convex_hull.buffer(0.000225)
+    # NOTE - maybe more efficient to generate boundary first then reproject second?
     
-    # download buildings
+    # download buildings within boundary
     buildings_raw = ox.footprints_from_polygon(boundary)
     
-    # create a filtered subset as a copy
+    # create filtered copy with only key columns
     buildings_filtered=buildings_raw[['building','building:levels','geometry']].copy()
 
-    # project the buildings to UTM
+    # project filtered copy to UTM
     buildings_filtered = ox.project_gdf(buildings_filtered)
 
     # convert 'building:levels' to float from object (int doesn't support NaN)
     buildings_filtered['building:levels']=buildings_filtered['building:levels'].astype(float)
-
+    # convert fill NaN with zeroes to allow conversion to int
+    buildings_filtered = buildings_filtered.fillna({'building:levels': 0})
+    buildings_filtered["building:levels"] = pd.to_numeric(buildings_filtered['building:levels'], downcast='integer')
+    
     # generate footprint areas
     buildings_filtered['footprint_m2']=buildings_filtered.area
 
@@ -261,14 +268,26 @@ def buildings_by_block(city_blocks_net):
     # where they intersect, add the city_block number onto each building
     # how = 'left', 'right', 'inner' sets how the index of the new gdf is determined, left retains buildings index
     # was 'intersects', 'contains', 'within'
-    buildings_with_blocks = gpd.sjoin(buildings_filtered, city_blocks_net[['geometry']], how="left", op='intersects')
+    buildings_with_blocks = gpd.sjoin(buildings_filtered, city_blocks[['geometry']], how="left", op='intersects')
     buildings_with_blocks.rename(columns={'index_right' : 'block_id'}, inplace=True)
 
-    # filter out the buildings that are not associated with a city_block
-    buildings_with_blocks = buildings_with_blocks[buildings_with_blocks.block_id.notnull()]
+    # convert any NaN values in block_id to zero, then convert to int
+    buildings_with_blocks = buildings_with_blocks.fillna({'block_id': 0})
+    buildings_with_blocks["block_id"] = pd.to_numeric(buildings_with_blocks['block_id'], downcast='integer')
 
-    # NOTES:
-    # convert 'building:levels' to int to get discrete colouring?
-    # tidy up use of block_id through the functions
-    
     return buildings_with_blocks
+
+def blocks_with_buildings(city_blocks, buildings):
+    
+    building_areas_by_block=buildings[['footprint_m2','total_GEA_m2']].groupby([buildings['block_id']]).sum()
+    # next line may not be necessary, don't want to create entry '0' in gdf of city_blocks
+    building_areas_by_block = building_areas_by_block.drop([0])
+    
+    city_blocks = city_blocks.merge(building_areas_by_block, on = 'block_id')
+    
+    city_blocks['GSI_net'] = city_blocks['footprint_m2']/(city_blocks['area_net_ha']*10000)
+    city_blocks['GSI_gross'] = city_blocks['footprint_m2']/(city_blocks['area_gross_ha']*10000)
+    city_blocks['FSI_net'] = city_blocks['total_GEA_m2']/(city_blocks['area_net_ha']*10000)
+    city_blocks['FSI_gross'] = city_blocks['total_GEA_m2']/(city_blocks['area_gross_ha']*10000)
+    
+    return city_blocks
