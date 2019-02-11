@@ -13,7 +13,7 @@ There are benefits to dealing with urban blocks directly rather than just as the
 
 ### Urban form, density and quality of life
 
-Urban Form and Density are recognised as having an impact on quality of life in urban environments. In terms of urban form, towers in otherwise empty estates are blamed for destroying the streetlife associated with traditional perimeter blocks. In terms of density, excessive residential densities are blamed for poor quality of life and access to green space yet low residential densities can make provision of public services and amenities unfeasibly expensive and difficult to access.
+Urban Form and Density are recognised as having an impact on quality of life in urban environments. In terms of urban form, towers in otherwise empty estates are blamed for destroying the streetlife associated with traditional perimeter blocks. In terms of density, excessive residential densities are blamed for poor quality of life with limited access to green space yet low residential densities can make provision of public services and amenities unfeasibly expensive.
 
 ### An evidence base
 
