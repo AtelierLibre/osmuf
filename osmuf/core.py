@@ -171,30 +171,20 @@ def graph_to_polygons(G, node_geometry=True, fill_edge_geometry=True):
     
 def city_blocks_from_point(point, distance):
     
-    # may be better to take the highway network as an input so that it can also be used elsewhere for
-    # e.g. connectivity assessment
-    
-    
-    # DOWNLOAD PLACE POLYGONS & SURROUNDING HIGHWAY NETWORK (GEOGRAPHIC COORDINATES)
-    
-    # net - a filter needs to be added to ensure it only retains place=city_block
-    place_polys = ox.footprints_from_point(point, distance, footprint_type="place")
-    
-    # use a buffered convex hull of the net city blocks to fetch highways within
-    # approx. 25m of the net city blocks. ox.graph_from_polygon takes the polygon
-    # in geographic coordiantes
-    boundary=place_polys.cascaded_union.convex_hull.buffer(0.000225)
-    
-    # highway network
+    # download 'place' polygons
+    city_blocks = ox.footprints_from_point(point, distance, footprint_type="place")
+    # create a convex hull of the place polygons and buffer approx. 25m in geographic coordinates
+    boundary = city_blocks.cascaded_union.convex_hull.buffer(0.000225)
+    # download the highway network within this boundary
     highway_network = ox.graph_from_polygon(boundary, network_type='all',
                                             simplify=True, retain_all=True, truncate_by_edge=True)
     
     
     # PROJECT NET CITY BLOCKS AND HIGHWAY NETWORK TO UTM
     
-    # create filtered copy of net_city_blocks
-    place_polys = place_polys.loc[place_polys['place'] == 'city_block']
-    city_blocks = place_polys[['place','geometry']].copy()
+    # filter place polygons to retain only city blocks
+    city_blocks = city_blocks.loc[city_blocks['place'] == 'city_block']
+    city_blocks = city_blocks[['place','geometry']].copy()
 
     # project city_blocks to UTM
     city_blocks = ox.project_gdf(city_blocks)
@@ -217,15 +207,19 @@ def city_blocks_from_point(point, distance):
     # polygonize the highway network & return it as a GeoDataFrame
     # this will include edge polygons that are removed in the next steps
     city_blocks_gross_raw = graph_to_polygons(highway_network, node_geometry=False)
-    
-    # first, transfer attributes from city_blocks_net to city_blocks_gross where they intersect
+    # transfer attributes from city_blocks_net to city_blocks_gross where they intersect
     city_blocks_gross = gpd.sjoin(city_blocks_gross_raw, city_blocks, how="left", op='intersects')
-    
     # dissolve together city_blocks_gross polygons that intersect with the same city_blocks polygon
     city_blocks_gross.rename(columns={'index_right' : 'block_id'}, inplace=True)
-    # this can be tidied up, just needs to be the index as an integer, doesn't need a column name
     city_blocks_gross = city_blocks_gross.dissolve(by='block_id')
+    # convert the index to int
     city_blocks_gross.index = city_blocks_gross.index.astype(int)
+    # remove unecessary columns
+    city_blocks_gross = city_blocks_gross[['place', 'geometry']]
+    # change text city_block to city_block_gross
+    city_blocks_gross["place"] = city_blocks_gross['place'].str.replace('city_block', 'city_block_gross')
+    # give the dataframe a name
+    city_blocks_gross.name = 'city_blocks_gross'
     
     # calculate gross area in hectares (not meters) and include as a column in city_blocks_net
     city_blocks['area_gross_ha'] = city_blocks_gross.area/10000
