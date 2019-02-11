@@ -5,7 +5,7 @@ It is in a large part inspired by the work of Geoff Boeing on OSMnx, Berghauser 
 
 ### Urban blocks - net or gross?
 
-Large scale studies of urban form often approximate city blocks by generating polygons from the centrelines of the transport network. The approach of OSMuf is to instead work with urban blocks as objects in themselves with their own spatial definition. Loosely this could be categorised as the difference between 'gross urban blocks' (defined by transport network centrelines) and 'net urban blocks' defined by the line separating privately owned land or land dedicated to public amenity from land dedicated to the transport network.
+Large scale studies of urban form often approximate city blocks by generating polygons from the centrelines of the transport network. The approach of OSMuf is to instead work with urban blocks as objects in themselves with their own spatial definition. Loosely this could be categorised as the difference between 'gross urban blocks' defined by transport network centrelines and 'net urban blocks' defined by the line separating privately owned land or land dedicated to public amenity from land dedicated to the transport network.
 
 ### Urban blocks as part of the urban fabric
 
