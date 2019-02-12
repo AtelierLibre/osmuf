@@ -34,7 +34,6 @@ import matplotlib.cm as cm
 import matplotlib.colors as colors
 from matplotlib.collections import PatchCollection
 
-
 # extract the coordinates of shapely polygons and multipolygons
 # as a list of tuples
 def extract_poly_coords(geom):
@@ -66,23 +65,20 @@ def circlizer(x):
 
 # takes a gdf with polgon geometry and returns a new gdf of smallest enclosing
 # circles with their areas (in hectares) centroids and regularity ratio
-def gdf_circlizer(gdf):
+def form_factor_of_blocks(poly_gdf):
     # create a new gdf that includes the geometry of the old gdf and its area
-    new_gdf = gdf.filter(['area_net_ha', 'geometry'])
+    circles_gdf = poly_gdf.filter(['geometry', 'area_net_ha'])
     # replace the polygon geometry with the smallest enclosing circle
-    new_gdf['geometry']=gdf['geometry'].apply(circlizer)
-
-    # calculate centroids for labelling purposes
-    new_gdf['centroid'] = gdf.centroid
+    circles_gdf['geometry'] = circles_gdf['geometry'].apply(circlizer)
 
     # calculate the area of the smallest enclosing circles
-    new_gdf['area_sec_ha'] = new_gdf.area/10000
+    circles_gdf['area_sec_ha'] = circles_gdf.area/10000
 
     # calculate 'regularity' as "the ratio between the area of the block and
     # the area of the circumscribed circle C" Barthelemy M. and Louf R., (2014)
-    new_gdf['regularity'] = new_gdf['area_net_ha']/new_gdf['area_sec_ha']
+    circles_gdf['form_factor'] = circles_gdf['area_net_ha']/circles_gdf['area_sec_ha']
 
-    return new_gdf
+    return circles_gdf
 
 
 # def graph_to_polygons(G, nodes=True, edges=True, node_geometry=True, fill_edge_geometry=True):
@@ -285,3 +281,76 @@ def blocks_with_buildings(city_blocks, buildings):
     city_blocks['FSI_gross'] = city_blocks['total_GEA_m2']/(city_blocks['area_gross_ha']*10000)
     
     return city_blocks
+
+################
+### PLOTTING ###
+################
+
+# for nicer looking plots
+import seaborn
+plt.style.use('seaborn')
+
+#  “helper function” that places a text box inside of a plot and acts as an “in-plot title”
+# from https://realpython.com/python-matplotlib-guide/
+# position format is x,y e.g. 0.02, 0.94
+def add_titlebox(ax, text):
+    ax.text(0.04, 0.92, text,
+        horizontalalignment='left',
+        transform=ax.transAxes,
+        bbox=dict(facecolor='white', alpha=0.6),
+        fontsize=12.5)
+    return ax
+
+# label style
+style = dict(size=11, color='black', horizontalalignment='center')
+
+# label individual geometries
+def label_geom(ax, gdf, column):
+    for idx, row in gdf.iterrows():
+        label = round(row[column], 2)
+        ax.text(row.geometry.centroid.x, row.geometry.centroid.y, label, **style)
+        
+def plot_form_factor(city_blocks_gross_raw, city_blocks_gross, city_blocks, circle_gdf):
+    gridsize = (2, 3)
+    fig = plt.figure(figsize=(18, 10))
+    
+    ax1 = plt.subplot2grid(gridsize, (0, 1), colspan=2, rowspan=2, facecolor='white')
+    ax2 = plt.subplot2grid(gridsize, (0, 0))
+    ax3 = plt.subplot2grid(gridsize, (1, 0))
+
+    ax = (ax1, ax2, ax3)
+    
+    # map
+    city_blocks_gross_raw.plot(ax=ax1, color='whitesmoke', edgecolor='white');
+
+    city_blocks_gross.plot(ax=ax1, color='lightgrey',edgecolor='white', alpha=1);
+
+    city_blocks.plot(ax=ax1, color='darkgrey', alpha=1);
+
+    circle_gdf.plot(ax=ax1,
+                    edgecolor='red',
+                    column='form_factor',
+                    cmap='Reds',
+                    vmin=0,
+                    vmax=1,
+                    alpha=0.6,
+                    legend=True)
+
+    # show form factor of city blocks
+    label_geom(ax1, circle_gdf, 'form_factor')
+
+    ax1.set_title('Form factor of urban blocks (φ)', fontsize=14)
+
+    # histogram - form factor, range=(0,1)
+    ax2.hist(circle_gdf['form_factor'], bins=20, color='Red', alpha=0.5)
+    add_titlebox(ax2, 'Histogram: form factor (φ)')
+    ax2.set_xlim([0, 1])
+
+    # scatterplot - 
+    ax3.scatter(x=circle_gdf.form_factor, y=circle_gdf.area_net_ha, c=circle_gdf.area_net_ha, cmap='RdYlGn')
+    add_titlebox(ax3, 'Scatter: area (ha), form factor (φ)')
+    ax3.set_xlabel("Form factor (φ)")
+    ax3.set_ylabel("Area (ha)")
+    ax3.set_xlim([0, 1])
+    
+    return fig, ax
