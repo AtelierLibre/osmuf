@@ -392,3 +392,70 @@ def plot_form_factor(city_blocks_gross_raw, city_blocks_gross, city_blocks, circ
     ax3.set_xlim([0, 1])
     
     return fig, ax
+
+# metric options are GSI_net and FSI_net
+
+def plot_urban_form(city_blocks_gross_raw, city_blocks_gross, city_blocks, buildings, metric='GSI_net'):
+    gridsize = (2, 3)
+    fig = plt.figure(figsize=(18, 10))
+    
+    ax1 = plt.subplot2grid(gridsize, (0, 1), colspan=2, rowspan=2, facecolor='white')
+    ax2 = plt.subplot2grid(gridsize, (0, 0))
+    ax3 = plt.subplot2grid(gridsize, (1, 0))
+
+    ax = (ax1, ax2, ax3)
+    
+    # MAP BASELAYERS - DON'T CHANGE
+    
+    # all polygons from highway network
+    city_blocks_gross_raw.plot(ax=ax1, color='whitesmoke', edgecolor='white');
+    # highway network polygons processed to correspond to net city blocks
+    city_blocks_gross.plot(ax=ax1, color='lightgrey',edgecolor='white');
+    # buildings with known storeys
+    buildings[buildings['building:levels']>0].plot(ax=ax1, color='darkgrey', edgecolor='white')
+    # buildings with unknown storeys as hatched
+    buildings[buildings['building:levels']==0].plot(ax=ax1, color='lightgrey', edgecolor='white', hatch='///')
+
+    if metric=='GSI_net':
+        column='GSI_net'
+        cmap='Reds'
+        color='Red'
+        vmin=0
+        vmax=1
+        title='Site Coverage (GSI)'
+        ylim=[0,1]
+        xlim=[0,1]
+    elif metric=='FSI_net':
+        column='FSI_net'
+        cmap='Purples'
+        color='Purple'
+        vmin=0
+        vmax=6
+        title='Floor Area Ratio (FSI)'
+        ylim=[0,6]
+        xlim=[0,6]
+    
+    # show the city_blocks coloured by metric chosen
+    city_blocks.plot(ax=ax1, column=column, cmap=cmap,
+                     vmin=vmin, vmax=vmax, alpha=0.6, legend=True)
+    
+    # label with metric chosen
+    label_geom(ax1, city_blocks, column)
+
+    ax1.set_title(title, fontsize=14)
+
+
+    # scatterplot - 
+    ax2.scatter(x=city_blocks.area_net_ha, y=city_blocks[column], color=color)
+    add_titlebox(ax2, title + ' by area (ha)')
+    ax2.set_xlabel("Area, net (ha)")
+    ax2.set_ylabel(title)
+    ax2.set_ylim(ylim)
+    # ax2.set_xlim([0, 1])
+    
+    # histogram - chosen metric, range=(0,1)
+    ax3.hist(city_blocks[column], bins=10, color=color, alpha=0.5)
+    # add_titlebox(ax2, 'Histogram: form factor (φ)')
+    ax3.set_xlim(xlim)
+      
+    return fig, ax
