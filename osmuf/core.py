@@ -309,7 +309,45 @@ def label_geom(ax, gdf, column):
     for idx, row in gdf.iterrows():
         label = round(row[column], 2)
         ax.text(row.geometry.centroid.x, row.geometry.centroid.y, label, **style)
-        
+
+# city_blocks plot
+def plot_city_blocks(city_blocks_gross_raw, city_blocks_gross, city_blocks):
+    gridsize = (2, 3)
+    fig = plt.figure(figsize=(18, 10))
+    
+    ax1 = plt.subplot2grid(gridsize, (0, 1), colspan=2, rowspan=2, facecolor='white')
+    ax2 = plt.subplot2grid(gridsize, (0, 0))
+    ax3 = plt.subplot2grid(gridsize, (1, 0))
+
+    ax = (ax1, ax2, ax3)
+    
+    # map
+    city_blocks_gross_raw.plot(ax=ax1, color='whitesmoke', edgecolor='white')
+
+    city_blocks_gross.plot(ax=ax1, color='lightgrey',edgecolor='white', alpha=1)
+
+    city_blocks.plot(ax=ax1, column='area_net_ha', cmap='Blues', alpha=0.5)
+
+    # show area and net-to-gross of city_blocks 
+    label_geom(ax1, city_blocks, 'area_net_ha')
+
+    ax1.set_title('City blocks net area (ha) and net-to-gross ratio', fontsize=14)
+
+    # histogram - form factor, range=(0,1), 
+    ax2.hist(city_blocks['area_net_ha'], bins='auto', color='Blue', alpha=0.5)
+    add_titlebox(ax2, 'City blocks net area (ha)')
+    # ax2.set_xlim([0, 1])
+
+    # scatterplot - 
+    ax3.scatter(x=city_blocks.area_net_ha, y=city_blocks.net_to_gross, color='Blue')
+    add_titlebox(ax3, 'Scatter: net area (ha), net_to_gross')
+    ax3.set_xlabel("Block net are (ha)")
+    ax3.set_ylabel("Net-to-gross ratio")
+    # ax3.set_xlim([0, 1])
+    
+    return fig, ax
+
+
 def plot_form_factor(city_blocks_gross_raw, city_blocks_gross, city_blocks, circle_gdf):
     gridsize = (2, 3)
     fig = plt.figure(figsize=(18, 10))
