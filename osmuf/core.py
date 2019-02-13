@@ -335,15 +335,18 @@ def plot_city_blocks(city_blocks_gross_raw, city_blocks_gross, city_blocks):
 
     # histogram - form factor, range=(0,1), 
     ax2.hist(city_blocks['area_net_ha'], bins='auto', color='Blue', alpha=0.5)
-    add_titlebox(ax2, 'City blocks net area (ha)')
-    # ax2.set_xlim([0, 1])
+    add_titlebox(ax2, 'Area Distribution')
+    ax2.set_xlabel("Net area (ha)")
+    ax2.set_ylabel("Count")
+    ax2.set_xlim([0, 4])
 
     # scatterplot - 
     ax3.scatter(x=city_blocks.area_net_ha, y=city_blocks.net_to_gross, color='Blue')
-    add_titlebox(ax3, 'Scatter: net area (ha), net_to_gross')
-    ax3.set_xlabel("Block net are (ha)")
+    add_titlebox(ax3, 'Net-to-gross by area')
+    ax3.set_xlabel("Net area (ha)")
     ax3.set_ylabel("Net-to-gross ratio")
-    # ax3.set_xlim([0, 1])
+    ax3.set_xlim([0, 4])
+    ax3.set_ylim([0, 1])
     
     return fig, ax
 
@@ -381,20 +384,62 @@ def plot_form_factor(city_blocks_gross_raw, city_blocks_gross, city_blocks, circ
 
     # histogram - form factor, range=(0,1)
     ax2.hist(circle_gdf['form_factor'], bins=20, color='Red', alpha=0.5)
-    add_titlebox(ax2, 'Histogram: form factor (φ)')
+    add_titlebox(ax2, 'Form factor (φ)')
+    ax2.set_xlabel("Form factor (φ)")
+    ax2.set_ylabel("Count")
     ax2.set_xlim([0, 1])
 
     # scatterplot - 
-    ax3.scatter(x=circle_gdf.form_factor, y=circle_gdf.area_net_ha, c=circle_gdf.area_net_ha, cmap='RdYlGn')
-    add_titlebox(ax3, 'Scatter: area (ha), form factor (φ)')
-    ax3.set_xlabel("Form factor (φ)")
-    ax3.set_ylabel("Area (ha)")
-    ax3.set_xlim([0, 1])
+    ax3.scatter(x=circle_gdf.area_net_ha, y=circle_gdf.form_factor, color='Red')
+    add_titlebox(ax3, "Form factor (φ)")
+    ax3.set_xlabel("Area (ha)")
+    ax3.set_ylabel("Form factor (φ)")
+    ax3.set_xlim([0, 4])
+    ax3.set_ylim([0, 1])
+    
+    return fig, ax
+
+def plot_buildings(city_blocks_gross_raw, city_blocks_gross, city_blocks, buildings):
+    gridsize = (2, 3)
+    fig = plt.figure(figsize=(18, 10))
+    
+    ax1 = plt.subplot2grid(gridsize, (0, 1), colspan=2, rowspan=2, facecolor='white')
+    ax2 = plt.subplot2grid(gridsize, (0, 0))
+    ax3 = plt.subplot2grid(gridsize, (1, 0))
+
+    ax = (ax1, ax2, ax3)
+    
+    # MAP BASELAYERS - DON'T CHANGE
+    
+    # all polygons from highway network
+    city_blocks_gross_raw.plot(ax=ax1, color='whitesmoke', edgecolor='white')
+    # highway network polygons processed to correspond to net city blocks
+    city_blocks_gross.plot(ax=ax1, color='lightgrey',edgecolor='white')
+    # net city blocks
+    city_blocks.plot(ax=ax1, color='darkgrey',edgecolor='white')
+    # buildings with unknown storeys as hatched
+    buildings[buildings['building:levels']==0].plot(ax=ax1, color='dimgrey', edgecolor='white', hatch='///')
+
+    # buildings with known storeys
+    buildings[buildings['building:levels']>0].plot(ax=ax1,
+                                                   column='building:levels',
+                                                   cmap='plasma',
+                                                   vmin=0,
+                                                   vmax=25,
+                                                   legend=True)
+ 
+    ax1.set_title('Building Heights (storeys)', fontsize=14)
+    
+    # histogram
+    ax3.hist(buildings['building:levels'], bins=26, color='Purple')
+    ax3.set_xlabel('Building storeys')
+    ax3.set_ylabel('Count')
+    # add_titlebox(ax2, 'Histogram: form factor (φ)')
+    ax3.set_xlim([0,25])
     
     return fig, ax
 
 # metric options are GSI_net and FSI_net
-
 def plot_urban_form(city_blocks_gross_raw, city_blocks_gross, city_blocks, buildings, metric='GSI_net'):
     gridsize = (2, 3)
     fig = plt.figure(figsize=(18, 10))
@@ -451,10 +496,11 @@ def plot_urban_form(city_blocks_gross_raw, city_blocks_gross, city_blocks, build
     ax2.set_xlabel("Area, net (ha)")
     ax2.set_ylabel(title)
     ax2.set_ylim(ylim)
-    # ax2.set_xlim([0, 1])
+    ax2.set_xlim([0, 4])
     
     # histogram - chosen metric, range=(0,1)
     ax3.hist(city_blocks[column], bins=10, color=color, alpha=0.5)
+    ax3.set_xlabel(title)
     # add_titlebox(ax2, 'Histogram: form factor (φ)')
     ax3.set_xlim(xlim)
       
