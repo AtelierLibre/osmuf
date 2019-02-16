@@ -420,13 +420,14 @@ def plot_buildings(city_blocks_gross_raw, city_blocks_gross, city_blocks, buildi
     # buildings with unknown storeys as hatched
     buildings[buildings['building:levels']==0].plot(ax=ax1, color='dimgrey', edgecolor='white', hatch='///')
 
-    # buildings with known storeys
+    # buildings with known storeys - 'categorical=True'
     buildings[buildings['building:levels']>0].plot(ax=ax1,
                                                    column='building:levels',
                                                    cmap='plasma',
                                                    vmin=0,
                                                    vmax=25,
-                                                   legend=True)
+                                                   legend=True,
+                                                   )
  
     ax1.set_title('Building Heights (storeys)', fontsize=14)
     
