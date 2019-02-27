@@ -6,3 +6,6 @@
 ################################################################################
 
 from .core import *
+from .utils import *
+from .plot import *
+from .smallestenclosingcircle import *
