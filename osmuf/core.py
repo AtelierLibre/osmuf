@@ -5,10 +5,6 @@
 # Web: https://github.com/atelierlibre/osmuf
 ################################################################################
 
-# import re
-# import time
-# import os
-# import ast
 import numpy as np
 import pandas as pd
 import geopandas as gpd
@@ -22,13 +18,6 @@ from shapely.geometry import Point, LineString, Polygon, MultiPolygon
 from shapely.ops import polygonize
 from shapely import wkt
 
-# from descartes import PolygonPatch
-
-# from osmnx import settings
-# from osmnx import save_and_show
-# from osmnx.utils import log
-# from osmnx.utils import make_str
-
 import matplotlib.pyplot as plt
 import matplotlib.cm as cm
 import matplotlib.colors as colors
@@ -38,35 +27,70 @@ from .plot import *
 from .utils import *
 
 def study_area_from_point(point, distance):
+    """
+    Define study area from center point and distance to edge of bounding box.
 
-    # define study area as gdf
+    Return this as a projected GeoDataFrame for plotting
+    and for summary data.
 
+    Parameters
+    ----------
+    point : tuple
+        the (lat, lon) point to create the bounding box around
+    distance : int
+        how many meters the north, south, east, and west sides of the box should
+        each be from the point
+
+    Returns
+    -------
+    GeoDataFrame
+    """
+    # use osmnx to define the bounding box, always return the crs
     bbox = ox.bbox_from_point(point, distance, project_utm=True, return_crs=True)
-    # distance is from centre to edge i.e. final square is double the distance
-    # north, south, east, west : tuple, if return_crs=False
-    # north, south, east, west, crs_proj : tuple, if return_crs=True
 
     # split the tuple
     n, s, e, w, crs_code = bbox
 
-    # Create geopandas GeoDataFrame which contains the bounding box as a named polygon
+    # Create GeoDataFrame
     study_area = gpd.GeoDataFrame()
-    # study_area.loc[0, 'Location'] = place_name
+    # create geometry column with bounding box polygon
     study_area.loc[0, 'geometry'] = Polygon([(w, s), (w, n), (e, n), (e, s)])
+    # create column with area in hectares
     study_area['area_ha'] = study_area.area/10000
+    # set the crs of the gdf
     study_area.crs = crs_code
 
     return study_area
 
 def city_blocks_from_point(point, distance):
+    """
+    Download and create GeoDataFrame of 'place=city_block' polygons.
 
-    # download 'place' polygons
+    use osmnx to download "place" polygons from a center point and distance to
+    edge of bounding box. Filter to retain minimal columns. Create new columns
+    recording perimeter in metres, area in hectares, and the perimeter per unit
+    area.
+
+    Parameters
+    ----------
+    point : tuple
+        the (lat, lon) point to create the bounding box around
+    distance : int
+        how many meters the north, south, east, and west sides of the box should
+        each be from the point
+
+    Returns
+    -------
+    GeoDataFrame
+    """
+
+    # use osmnx to download 'place' polygons
     city_blocks = ox.footprints_from_point(point, distance, footprint_type="place")
     # filter place polygons to retain only city blocks
     city_blocks = city_blocks.loc[city_blocks['place'] == 'city_block']
     # keep only two columns 'place' and 'geometry'
     city_blocks = city_blocks[['place','geometry']].copy()
-    # project city_blocks to UTM
+    # use osmnx to project city_blocks to UTM
     city_blocks = ox.project_gdf(city_blocks)
     # write perimeter length into column
     city_blocks['perimeter_m'] = city_blocks.length
@@ -80,6 +104,27 @@ def city_blocks_from_point(point, distance):
     return city_blocks
 
 def street_graph_from_point(point, distance):
+    """
+    Use osmnx to retrieve a networkx graph from OpenStreetMap.
+
+    This function uses osmnx to obtain a graph with some set parameters. It
+    projects the graph and converts it to undirected. This is important - a
+    directed graph creates overlapping edges which shapely fails to
+    polygonize.
+
+    Parameters
+    ----------
+    point : tuple
+        the (lat, lon) point to create the bounding box around
+    distance : int
+        how many meters the north, south, east, and west sides of the box should
+        each be from the point
+
+    Returns
+    -------
+    networkx multidigraph
+    """
+
     # download the highway network within this boundary
     street_graph = ox.graph_from_point(point, distance, network_type='all',
                                        simplify=True, retain_all=True,
@@ -92,10 +137,26 @@ def street_graph_from_point(point, distance):
     return street_graph
 
 def gdf_convex_hull(gdf):
+    """
+    Creates a convex hull around the total extent of a GeoDataFrame.
 
+    Used to define a polygon for retrieving geometries within. When calculating
+    densities for urban blocks we need to retrieve the full extent of e.g.
+    buildings within the blocks, not crop them to an arbitrary bounding box.
+
+    Parameters
+    ----------
+    gdf : geodataframe
+        currently accepts a projected gdf
+
+    Returns
+    -------
+    shapely polygon
+    """
     ### INSERT CHECK FOR CRS HERE?
 
-    # project gdf to geographic coordinates as footprints_from_polygon requires it
+    # project gdf back to geographic coordinates as footprints_from_polygon
+    # requires it
     gdf_temp = ox.project_gdf(gdf, to_latlong=True)
     # determine the boundary polygon to fetch buildings within
     # buffer originally 0.000225, buffer actually needs to go whole block away
@@ -106,8 +167,22 @@ def gdf_convex_hull(gdf):
     return boundary
 
 def street_graph_from_gdf(gdf):
+    """
+    Download streets within a convex hull around a GeoDataFrame.
 
-    # generate boundary
+    Used to ensure that all streets around city blocks are downloaded, not just
+    those inside an arbitrary bounding box.
+
+    Parameters
+    ----------
+    gdf : geodataframe
+        currently accepts a projected gdf
+
+    Returns
+    -------
+    networkx multidigraph
+    """
+    # generate convex hull around the gdf
     boundary = gdf_convex_hull(gdf)
 
     # download the highway network within this boundary
@@ -122,6 +197,19 @@ def street_graph_from_gdf(gdf):
     return street_graph
 
 def streets_from_street_graph(street_graph):
+    """
+    Use osmnx to convert networkx multidigraph to a GeoDataFrame.
+
+    Primarily here to allow future filtering of streets data for osmuf purposes
+
+    Parameters
+    ----------
+    street_graph : networkx multidigraph
+
+    Returns
+    -------
+    GeoDataFrame
+    """
 
     streets = ox.graph_to_gdfs(street_graph, nodes=False)
 
@@ -130,7 +218,22 @@ def streets_from_street_graph(street_graph):
     return streets
 
 def footprints_from_gdf(gdf):
+    """
+    Download footprints within a convex hull around a GeoDataFrame.
 
+    Used to ensure that all footprints within city blocks are downloaded, not
+    just those inside an arbitrary bounding box. Currently defaults to
+    buildings. Amend in future to work with other footprint types.
+
+    Parameters
+    ----------
+    gdf : geodataframe
+        currently accepts a projected gdf
+
+    Returns
+    -------
+    GeoDataFrame
+    """
     # generate boundary
     boundary = gdf_convex_hull(gdf)
 
@@ -140,7 +243,22 @@ def footprints_from_gdf(gdf):
     return footprints
 
 def buildings_from_gdf(gdf):
+    """
+    Download buildings within convex hull around a GeoDataFrame.
 
+    Download buildings within the convex hull of a gdf. Keep only building
+    height and area information. Generate measures of footprint size and total
+    Gross External Area (footprint x number of storeys).
+
+    Parameters
+    ----------
+    gdf : geodataframe
+        currently accepts a projected gdf
+
+    Returns
+    -------
+    GeoDataFrame
+    """
     # download buildings within boundary
     buildings = footprints_from_gdf(gdf)
 
@@ -167,6 +285,25 @@ def buildings_from_gdf(gdf):
     return buildings
 
 def join_buildings_city_block_id(buildings, city_blocks):
+    """
+    Add index number of enclosing city_block to buildings geodataframe.
+
+    Where a building is not inside a city_block give it a block_id of zero.
+
+    Convert all block_id numbers to integers.
+
+    Parameters
+    ----------
+    buildings : geodataframe
+        polygons (geometry?) receiving id of enclosing polygons.
+
+    city_blocks : geodataframe
+        enclosing polygons to transfering id numbers onto buildings.
+
+    Returns
+    -------
+    GeoDataFrame
+    """
     # where they intersect, add the city_block number onto each building
     # how = 'left', 'right', 'inner' sets how the index of the new gdf is determined, left retains buildings index
     # was 'intersects', 'contains', 'within'
@@ -180,15 +317,64 @@ def join_buildings_city_block_id(buildings, city_blocks):
     return buildings
 
 def link_buildings_highways(buildings, highways):
+    """
+    Return id of highway that the building is closest to.
+
+    Parameters
+    ----------
+    buildings : geodataframe
+        polygons (geometry?) receiving id of nearest highway.
+
+    highways : geodataframe
+        streets to transfering id numbers onto buildings.
+
+    Check this does actually return an integer.
+
+    Returns
+    -------
+    integer
+    """
     return highways.distance(buildings).idxmin()
 
 def join_buildings_street_id(buildings, streets):
+    """
+    Add index number of nearest street to buildings geodataframe.
+
+    Parameters
+    ----------
+    buildings : geodataframe
+        polygons (geometry?) receiving id of enclosing polygons.
+
+    streets : geodataframe
+        streets to transfer id numbers onto buildings.
+
+    Returns
+    -------
+    GeoDataFrame
+    """
 
     buildings['street_id'] = buildings.geometry.apply(link_buildings_highways, args=(streets,))
 
     return buildings
 
 def form_factor(poly_gdf):
+    """
+    Returns a geodataframe of  smallest enclosing 'circles' (shapely polygons)
+    generated from the input geodataframe of polygons.
+
+    It includes columns that contain the area of the original polygon and the
+    circles and the 'form factor' ratio of the area of the polygon to the area
+    of the enclosing circle.
+
+    Parameters
+    ----------
+    poly_gdf : geodataframe
+        a geodataframe containing polygons.
+
+    Returns
+    -------
+    GeoDataFrame
+    """
     # takes a gdf with polgon geometry and returns a new gdf of smallest enclosing
     # circles with their areas (in hectares) centroids and regularity ratio
 
@@ -208,12 +394,15 @@ def form_factor(poly_gdf):
 
 def graph_to_polygons(G, node_geometry=True, fill_edge_geometry=True):
     """
-    Convert the edges of a graph into a GeoDataFrame of polygons
+    Convert the edges of a graph into a GeoDataFrame of polygons.
+
     Parameters
     ----------
     G : networkx multidigraph
+
     node_geometry : bool
         if True, create a geometry column from node x and y data
+
     fill_edge_geometry : bool
         if True, fill in missing edge geometry fields using origin and
         destination nodes
@@ -222,8 +411,6 @@ def graph_to_polygons(G, node_geometry=True, fill_edge_geometry=True):
     GeoDataFrame
         gdf_polygons
     """
-
-    start_time = time.time()
 
     # create a list to hold our edges, then loop through each edge in the
     # graph
@@ -272,7 +459,6 @@ def graph_to_polygons(G, node_geometry=True, fill_edge_geometry=True):
     gdf_polygons['geometry'] = None
 
     # Assign the list of polygons to the geometry column
-    # Genereate area and centroid columns
     gdf_polygons.geometry = polygons
 
     # Set the crs
@@ -282,7 +468,26 @@ def graph_to_polygons(G, node_geometry=True, fill_edge_geometry=True):
     return gdf_polygons
 
 def gen_city_blocks_gross(street_graph, city_blocks):
+    """
+    Generate approximate gross urban blocks by polygonizing the highway network.
 
+    It uses a geodataframe of net urban blocks (downloaded as
+    'place = city_block') to unify fragments to give better results. It also
+    transfers measures of the gross urban blocks onto the net urban blocks for
+    calculations.
+
+    Parameters
+    ----------
+    street_graph : networkx multidigraph
+        street centrelines
+
+    city_blocks : GeoDataFrame
+        net urban blocks used to unify fragments
+
+    Returns
+    -------
+    GeoDataFrame
+    """
     ### BOTH PROJECTED - NEED TO CHECK CRS HERE?
 
     # polygonize the highway network & return it as a GeoDataFrame
@@ -310,7 +515,22 @@ def gen_city_blocks_gross(street_graph, city_blocks):
     return (city_blocks, city_blocks_gross)
 
 def join_city_blocks_building_data(city_blocks, buildings):
+    """
+    Add summary building data onto city blocks.
 
+    Requires columns to be present in the gdfs generated by other functions in
+    osmuf.
+
+    Parameters
+    ----------
+    city_blocks : geodataframe
+
+    buildings : geodataframe
+
+    Returns
+    -------
+    GeoDataFrame
+    """
     building_areas_by_block=buildings[['footprint_m2','total_GEA_m2']].groupby([buildings['block_id']]).sum()
     # next line may not be necessary, don't want to create entry '0' in gdf of city_blocks
     building_areas_by_block = building_areas_by_block.drop([0])
