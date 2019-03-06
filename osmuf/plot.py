@@ -1,5 +1,5 @@
 ################################################################################
-# Module: core.py
+# Module: plot.py
 # Description: urban form analysis from OpenStreetMap
 # License: MIT, see full license in LICENSE.txt
 # Web: https://github.com/atelierlibre/osmuf
@@ -113,18 +113,18 @@ def ax_map_settings(ax_, study_area):
     # set the background to transparent
     ax_.set_facecolor('None')
 
-def ax_background_map(ax_, streets, city_blocks_gross, city_blocks, buildings):
+def ax_background_map(ax_, city_blocks_gross, city_blocks):
 
-    # Background - gross blocks
-    streets.plot(ax=ax_, edgecolor='white', linestyle=':', linewidth=1)
-    city_blocks_gross.plot(ax=ax_, color='silver', linewidth=1.5)
+    city_blocks_gross.plot(ax=ax_, color='silver', edgecolor='white', linewidth=1.5)
     city_blocks.plot(ax=ax_, color='darkgrey')
-    buildings.plot(ax=ax_, color='grey')
+    # Remove streets and buildings for now - add to individual plots as req'd
+    # streets.plot(ax=ax_, edgecolor='white', linestyle=':', linewidth=1)
+    # buildings.plot(ax=ax_, color='grey')
 
-def ax_map_block_size(ax_, study_area, streets, city_blocks_gross, city_blocks, buildings):
+def ax_map_block_size(ax_, study_area, city_blocks_gross, city_blocks):
 
     # draw the background map
-    ax_background_map(ax_, streets, city_blocks_gross, city_blocks, buildings)
+    ax_background_map(ax_, city_blocks_gross, city_blocks)
 
     # show city blocks coloured by their net_to_gross, labeled with sizes and ratio
     city_blocks.plot(ax=ax_, column='net_to_gross', cmap='Blues', alpha=0.5, vmin=0, vmax=1, legend=True)
@@ -135,17 +135,17 @@ def ax_map_block_size(ax_, study_area, streets, city_blocks_gross, city_blocks, 
 
     ax_map_settings(ax_, study_area)
 
-def ax_map_form_factor(ax_, study_area, streets, city_blocks_gross, city_blocks, buildings, city_blocks_form_factor):
+def ax_map_form_factor(ax_, study_area, city_blocks_gross, city_blocks, city_blocks_form_factor):
 
     # draw the background map
-    ax_background_map(ax_, streets, city_blocks_gross, city_blocks, buildings)
+    ax_background_map(ax_, city_blocks_gross, city_blocks)
 
     city_blocks.plot(ax=ax_,
                      column='perimeter_per_area',
                      cmap='Reds',
                      linewidth=1.0,
                      alpha=0.5,
-                     legend=True);
+                     legend=True)
 
     city_blocks_form_factor.plot(ax=ax_,
                             edgecolor='red',
@@ -161,10 +161,13 @@ def ax_map_form_factor(ax_, study_area, streets, city_blocks_gross, city_blocks,
 
     ax_map_settings(ax_, study_area)
 
-def ax_map_GSI(ax_, study_area, streets, city_blocks_gross, city_blocks, buildings):
+def ax_map_GSI(ax_, study_area, city_blocks_gross, city_blocks, buildings):
 
     # draw the background map
-    ax_background_map(ax_, streets, city_blocks_gross, city_blocks, buildings)
+    ax_background_map(ax_, city_blocks_gross, city_blocks)
+
+    # show buildings
+    buildings.plot(ax=ax_, color='grey')
 
     # show city blocks coloured by their net_to_gross, labeled with sizes and ratio
     city_blocks.plot(ax=ax_, column='GSI_net', cmap='Oranges', alpha=0.5, vmin=0, vmax=1, legend=True)
@@ -175,10 +178,10 @@ def ax_map_GSI(ax_, study_area, streets, city_blocks_gross, city_blocks, buildin
 
     ax_map_settings(ax_, study_area)
 
-def ax_map_building_heights(ax_, study_area, streets, city_blocks_gross, city_blocks, buildings):
+def ax_map_building_heights(ax_, study_area, city_blocks_gross, city_blocks, buildings):
 
     # draw the background map
-    ax_background_map(ax_, streets, city_blocks_gross, city_blocks, buildings)
+    ax_background_map(ax_, city_blocks_gross, city_blocks)
 
     # buildings with unknown storeys as hatched
     buildings[buildings['building:levels']==0].plot(ax=ax_, color='grey', edgecolor='white', hatch='///')
@@ -194,10 +197,10 @@ def ax_map_building_heights(ax_, study_area, streets, city_blocks_gross, city_bl
 
     ax_map_settings(ax_, study_area)
 
-def ax_map_FSI(ax_, study_area, streets, city_blocks_gross, city_blocks, buildings):
+def ax_map_FSI(ax_, study_area, city_blocks_gross, city_blocks, buildings):
 
     # draw the background map
-    ax_background_map(ax_, streets, city_blocks_gross, city_blocks, buildings)
+    ax_background_map(ax_, city_blocks_gross, city_blocks)
 
     # show city blocks coloured by their net_to_gross, labeled with sizes and ratio
     city_blocks.plot(ax=ax_, column='FSI_net', cmap='Purples', alpha=0.5, vmin=0, vmax=6, legend=True)
@@ -211,10 +214,10 @@ def ax_map_FSI(ax_, study_area, streets, city_blocks_gross, city_blocks, buildin
 
     ax_map_settings(ax_, study_area)
 
-def ax_map_spacemate(ax_, study_area, streets, city_blocks_gross, city_blocks, buildings):
+def ax_map_spacemate(ax_, study_area, city_blocks_gross, city_blocks, buildings):
 
     # draw the background map
-    ax_background_map(ax_, streets, city_blocks_gross, city_blocks, buildings)
+    ax_background_map(ax_, city_blocks_gross, city_blocks)
 
     # show city blocks coloured by their net_to_gross, labeled with sizes and ratio
     city_blocks.plot(ax=ax_, column='FSI_gross', cmap='viridis', alpha=0.5, vmin=0, vmax=6, legend=True)
@@ -242,7 +245,7 @@ def ax_empty(ax_):
 
 def ax_block_ntg_to_size(ax_, city_blocks):
     # ax block net_to_gross against size
-    ax_.scatter(x=city_blocks.area_net_ha, y=city_blocks.net_to_gross, color='steelblue')
+    ax_.scatter(x=city_blocks.area, y=city_blocks.net_to_gross, color='steelblue')
     add_titlebox(ax_, 'Net-to-gross by area')
     ax_.set_xlabel("Net area (ha)")
     ax_.set_ylabel("Net-to-gross ratio")

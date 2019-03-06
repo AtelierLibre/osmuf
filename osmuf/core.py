@@ -8,23 +8,16 @@
 import numpy as np
 import pandas as pd
 import geopandas as gpd
-import networkx as nx
 import osmnx as ox
-import seaborn as sns
-
-import osmuf.smallestenclosingcircle as sec
 
 from shapely.geometry import Point, LineString, Polygon, MultiPolygon
 from shapely.ops import polygonize
 from shapely import wkt
 
 import matplotlib.pyplot as plt
-import matplotlib.cm as cm
-import matplotlib.colors as colors
-from matplotlib.collections import PatchCollection
 
-from .plot import *
-from .utils import *
+from .utils import graph_to_polygons, extract_poly_coords, circlizer
+from .utils import dict_to_gdf, gdf_convex_hull, footprints_from_gdf
 
 def study_area_from_point(point, distance):
     """
@@ -56,15 +49,17 @@ def study_area_from_point(point, distance):
     # create geometry column with bounding box polygon
     study_area.loc[0, 'geometry'] = Polygon([(w, s), (w, n), (e, n), (e, s)])
     # create column with area in hectares
-    study_area['area_ha'] = study_area.area/10000
+    study_area['area_m2'] = study_area.area
     # set the crs of the gdf
     study_area.crs = crs_code
+    # set the name of the gdf
+    study_area.gdf_name = 'study_area'
 
     return study_area
 
-def city_blocks_from_point(point, distance):
+def places_from_point(point, distance, place_type='city_block'):
     """
-    Download and create GeoDataFrame of 'place=city_block' polygons.
+    Download and create GeoDataFrame of 'place' polygons of the type 'place_type'.
 
     use osmnx to download "place" polygons from a center point and distance to
     edge of bounding box. Filter to retain minimal columns. Create new columns
@@ -85,25 +80,19 @@ def city_blocks_from_point(point, distance):
     """
 
     # use osmnx to download 'place' polygons
-    city_blocks = ox.footprints_from_point(point, distance, footprint_type="place")
+    places = ox.footprints_from_point(point, distance, footprint_type="place")
     # filter place polygons to retain only city blocks
-    city_blocks = city_blocks.loc[city_blocks['place'] == 'city_block']
+    places = places.loc[places['place'] == place_type]
     # keep only two columns 'place' and 'geometry'
-    city_blocks = city_blocks[['place','geometry']].copy()
-    # use osmnx to project city_blocks to UTM
-    city_blocks = ox.project_gdf(city_blocks)
-    # write perimeter length into column
-    city_blocks['perimeter_m'] = city_blocks.length
-    # calculate areas in hectares (not meters) and include as a column
-    city_blocks['area_net_ha'] = city_blocks.area/10000
-    # calculate perimeter (m) per net area (ha)
-    city_blocks['perimeter_per_area'] = city_blocks['perimeter_m']/city_blocks['area_net_ha']
+    places = places[['place','geometry']].copy()
+    # project and measure places
+    # places = project_and_measure_gdf(places)
     # name the index
-    city_blocks.index.name='block_id'
+    places.index.name='place_id'
 
-    return city_blocks
+    return places
 
-def street_graph_from_point(point, distance):
+def street_graph_from_point(point, distance, network_type='all'):
     """
     Use osmnx to retrieve a networkx graph from OpenStreetMap.
 
@@ -119,6 +108,8 @@ def street_graph_from_point(point, distance):
     distance : int
         how many meters the north, south, east, and west sides of the box should
         each be from the point
+    network_type : string
+        network_type as defined in osmnx
 
     Returns
     -------
@@ -126,7 +117,7 @@ def street_graph_from_point(point, distance):
     """
 
     # download the highway network within this boundary
-    street_graph = ox.graph_from_point(point, distance, network_type='all',
+    street_graph = ox.graph_from_point(point, distance, network_type,
                                        simplify=True, retain_all=True,
                                        truncate_by_edge=True, clean_periphery=True)
     # project the network to UTM & convert to undirected graph to
@@ -136,37 +127,7 @@ def street_graph_from_point(point, distance):
 
     return street_graph
 
-def gdf_convex_hull(gdf):
-    """
-    Creates a convex hull around the total extent of a GeoDataFrame.
-
-    Used to define a polygon for retrieving geometries within. When calculating
-    densities for urban blocks we need to retrieve the full extent of e.g.
-    buildings within the blocks, not crop them to an arbitrary bounding box.
-
-    Parameters
-    ----------
-    gdf : geodataframe
-        currently accepts a projected gdf
-
-    Returns
-    -------
-    shapely polygon
-    """
-    ### INSERT CHECK FOR CRS HERE?
-
-    # project gdf back to geographic coordinates as footprints_from_polygon
-    # requires it
-    gdf_temp = ox.project_gdf(gdf, to_latlong=True)
-    # determine the boundary polygon to fetch buildings within
-    # buffer originally 0.000225, buffer actually needs to go whole block away
-    # to get complete highways therefor trying 0.001
-    boundary=gdf_temp.cascaded_union.convex_hull.buffer(0.001)
-    # NOTE - maybe more efficient to generate boundary first then reproject second?
-
-    return boundary
-
-def street_graph_from_gdf(gdf):
+def street_graph_from_gdf(gdf, network_type='all'):
     """
     Download streets within a convex hull around a GeoDataFrame.
 
@@ -178,6 +139,9 @@ def street_graph_from_gdf(gdf):
     gdf : geodataframe
         currently accepts a projected gdf
 
+    network_type : string
+        network_type as defined in osmnx
+
     Returns
     -------
     networkx multidigraph
@@ -186,19 +150,107 @@ def street_graph_from_gdf(gdf):
     boundary = gdf_convex_hull(gdf)
 
     # download the highway network within this boundary
-    street_graph = ox.graph_from_polygon(boundary, network_type='all',
+    street_graph = ox.graph_from_polygon(boundary, network_type,
                                        simplify=True, retain_all=True,
-                                       truncate_by_edge=True, clean_periphery=True)
-    # project the network to UTM & convert to undirected graph to
-    street_graph = ox.project_graph(street_graph)
+                                       truncate_by_edge=True, clean_periphery=False)
     # remove duplicates which make polygonization fail
     street_graph = ox.get_undirected(street_graph)
 
     return street_graph
 
-def streets_from_street_graph(street_graph):
+def net_city_blocks_from_places(place_gdf):
     """
-    Use osmnx to convert networkx multidigraph to a GeoDataFrame.
+    Filter place gdf to retain net city_blocks and minimal columns.
+
+    Parameters
+    ----------
+    gdf: GeoDataFrame
+
+    Returns
+    -------
+    GeoDataFrame
+    """
+
+    # filter place polygons to retain only city blocks
+    net_city_blocks = place_gdf.loc[place_gdf['place'] == 'city_block']
+    # keep only two columns 'place' and 'geometry'
+    net_city_blocks = net_city_blocks[['place','geometry']].copy()
+
+    # change text city_block to net_city_block
+    net_city_blocks["place"] = net_city_blocks['place'].str.replace('city_block', 'net_city_block')
+
+    # name the dataframe - osmnx uses 'gdf_name' not sure if this is standard
+    net_city_blocks.gdf_name = 'net_city_blocks'
+    # name the index
+    net_city_blocks.index.name='net_city_blocks_id'
+
+    return net_city_blocks
+
+def gen_gross_city_blocks(street_graph, net_city_blocks):
+    """
+    Generate approximate gross urban blocks by polygonizing the highway network.
+
+    Use a geodataframe of net urban blocks to unify fragments to give better results.
+
+    Parameters
+    ----------
+    street_graph : networkx multidigraph
+        street centrelines
+
+    city_blocks : GeoDataFrame
+        net urban blocks used to unify fragments
+
+    Returns
+    -------
+    GeoDataFrame
+    """
+
+    # polygonize the highway network & return it as a GeoDataFrame
+    # this will include edge polygons that are removed in the next steps
+    gross_city_blocks = graph_to_polygons(street_graph, node_geometry=False)
+
+    # transfer attributes from city_blocks_net to city_blocks_gross where they intersect
+    gross_city_blocks = gpd.sjoin(gross_city_blocks, net_city_blocks, how="left", op='intersects')
+    # dissolve together gross_city_blocks polygons that intersect with the same net_city_blocks polygon
+    gross_city_blocks.rename(columns={'index_right' : 'net_city_block_id'}, inplace=True)
+    gross_city_blocks = gross_city_blocks.dissolve(by='net_city_block_id')
+    # convert the index to int
+    gross_city_blocks.index = gross_city_blocks.index.astype(int)
+    # remove unecessary columns
+    gross_city_blocks = gross_city_blocks[['place', 'geometry']]
+    # change text city_block to city_block_gross
+    gross_city_blocks["place"] = gross_city_blocks['place'].str.replace('net_city_block', 'gross_city_block')
+ 
+    # name the dataframe
+    gross_city_blocks.gdf_name = 'gross_city_blocks'
+    # name the index
+    gross_city_blocks.index.name='gross_city_blocks_id'
+
+
+    return gross_city_blocks
+
+def buildings_from_gdf(gdf):
+    """
+    Download buildings within convex hull around a GeoDataFrame.
+
+    Parameters
+    ----------
+    gdf : geodataframe
+
+    Returns
+    -------
+    GeoDataFrame
+    """
+    # download buildings within boundary
+    buildings = footprints_from_gdf(gdf)
+    # name the dataframe
+    buildings.gdf_name = 'buildings'
+
+    return buildings
+
+def streets_proj_from_street_graph(street_graph):
+    """
+    Project and convert networkx multidigraph to a GeoDataFrame.
 
     Primarily here to allow future filtering of streets data for osmuf purposes
 
@@ -210,94 +262,114 @@ def streets_from_street_graph(street_graph):
     -------
     GeoDataFrame
     """
-
-    streets = ox.graph_to_gdfs(street_graph, nodes=False)
+    # project the network to UTM
+    street_graph = ox.project_graph(street_graph)
+    # convert to gdf
+    streets_proj = ox.graph_to_gdfs(street_graph, nodes=False)
 
     # insert filtering/processing here for OSMuf purposes
 
-    return streets
+    return streets_proj
 
-def footprints_from_gdf(gdf):
+def merge_gdfs(gdf_list):
     """
-    Download footprints within a convex hull around a GeoDataFrame.
-
-    Used to ensure that all footprints within city blocks are downloaded, not
-    just those inside an arbitrary bounding box. Currently defaults to
-    buildings. Amend in future to work with other footprint types.
+    Merge GeoDataFrames.
 
     Parameters
     ----------
-    gdf : geodataframe
-        currently accepts a projected gdf
+    gdf_list : list of geodataframes
 
     Returns
     -------
     GeoDataFrame
     """
-    # generate boundary
-    boundary = gdf_convex_hull(gdf)
 
-    # download buildings within boundary
-    footprints = ox.footprints_from_polygon(boundary)
+    # dataframesList = [landuse, leisure]
+    merged_gdf = gpd.GeoDataFrame(pd.concat(gdf_list, ignore_index=True, sort=True), crs=gdf_list[0].crs)
 
-    return footprints
+    # name the dataframe
+    merged_gdf.gdf_name = gdf_list[0].gdf_name
 
-def buildings_from_gdf(gdf):
+    return merged_gdf
+
+def project_measure_gdf(gdf):
     """
-    Download buildings within convex hull around a GeoDataFrame.
+    Project GeoDataFrame to UTM and measure perimeter and area.
 
-    Download buildings within the convex hull of a gdf. Keep only building
-    height and area information. Generate measures of footprint size and total
+    Use osmnx to project a GeoDataFrame to UTM. Create new columns
+    recording perimeter in metres, area in hectares, and the perimeter per unit
+    area.
+
+    Parameters
+    ----------
+    gdf : GeoDataFrame
+
+    Returns
+    -------
+    GeoDataFrame
+    """
+    # use osmnx to project gdf to UTM
+    gdf_proj = ox.project_gdf(gdf)
+    # write perimeter length into column
+    gdf_proj['perimeter_m'] = gdf_proj.length
+    # write area into column
+    gdf_proj['area_m2'] = gdf_proj.area
+
+    gdf_proj[['perimeter_m', 'area_m2']] = gdf_proj[['perimeter_m', 'area_m2']].round(2)
+
+    return gdf_proj
+
+def project_measure_buildings(buildings):
+    """
+    Project, filter and measure GeoDataFrame of buildings.
+
+    Keep only building height and area information. Generate measures of footprint size and total
     Gross External Area (footprint x number of storeys).
 
     Parameters
     ----------
     gdf : geodataframe
-        currently accepts a projected gdf
+        gdf of buildings
 
     Returns
     -------
     GeoDataFrame
     """
-    # download buildings within boundary
-    buildings = footprints_from_gdf(gdf)
+    # project to UTM
+    buildings_proj = ox.project_gdf(buildings)
+    # create filtered copy with only key columns, creating 'building:levels' if not present
+    buildings_proj = buildings_proj.reindex(columns=['building','building:levels','geometry'])
 
-    # create filtered copy with only key columns
-    buildings = buildings[['building','building:levels','geometry']].copy()
-    # project filtered copy to UTM
-    buildings = ox.project_gdf(buildings)
-
-    ### NEED TO CHECK HERE THAT 'building:levels' IS ACTUALLY RETURNED - MIGHT NOT BE
     ### THERE ACTUALLY IS AN INTEGER TYPE WITH NAN, MAY BE BETTER
 
     # convert 'building:levels' to float from object (int doesn't support NaN)
-    buildings['building:levels']=buildings['building:levels'].astype(float)
+    buildings_proj['building:levels']=buildings_proj['building:levels'].astype(float)
     # convert fill NaN with zeroes to allow conversion to int
-    buildings = buildings.fillna({'building:levels': 0})
+    buildings_proj = buildings_proj.fillna({'building:levels': 0})
     # convert to int
-    buildings["building:levels"] = pd.to_numeric(buildings['building:levels'], downcast='integer')
+    buildings_proj["building:levels"] = pd.to_numeric(buildings_proj['building:levels'], downcast='integer')
 
     # generate footprint areas
-    buildings['footprint_m2']=buildings.area
+    buildings_proj['footprint_m2']=buildings_proj.area
     # generate total_GEA
-    buildings['total_GEA_m2']=buildings.area*buildings['building:levels']
+    buildings_proj['total_GEA_m2']=buildings_proj.area*buildings_proj['building:levels']
 
-    return buildings
+    return buildings_proj
 
-def join_buildings_city_block_id(buildings, city_blocks):
+def join_buildings_place_id(buildings, places):
     """
-    Add index number of enclosing city_block to buildings geodataframe.
+    Add index number of enclosing place polygon to buildings geodataframe.
 
-    Where a building is not inside a city_block give it a block_id of zero.
+    Where a building is not inside a place polygon give it a place_id of zero.
 
-    Convert all block_id numbers to integers.
+    Convert all place_id numbers to integers.
 
     Parameters
     ----------
     buildings : geodataframe
         polygons (geometry?) receiving id of enclosing polygons.
 
-    city_blocks : geodataframe
+    places : geodataframe
         enclosing polygons to transfering id numbers onto buildings.
 
     Returns
@@ -307,12 +379,14 @@ def join_buildings_city_block_id(buildings, city_blocks):
     # where they intersect, add the city_block number onto each building
     # how = 'left', 'right', 'inner' sets how the index of the new gdf is determined, left retains buildings index
     # was 'intersects', 'contains', 'within'
-    buildings = gpd.sjoin(buildings, city_blocks[['geometry']], how="left", op='intersects')
-    buildings.rename(columns={'index_right' : 'block_id'}, inplace=True)
+    buildings = gpd.sjoin(buildings, places[['geometry']], how="left", op='intersects')
+
+    place_column_name = places.gdf_name + '_id'
+    buildings.rename(columns={'index_right' : place_column_name}, inplace=True)
 
     # convert any NaN values in block_id to zero, then convert to int
-    buildings = buildings.fillna({'block_id': 0})
-    buildings["block_id"] = pd.to_numeric(buildings['block_id'], downcast='integer')
+    buildings = buildings.fillna({place_column_name: 0})
+    buildings[place_column_name] = pd.to_numeric(buildings[place_column_name], downcast='integer')
 
     return buildings
 
@@ -336,6 +410,26 @@ def link_buildings_highways(buildings, highways):
     """
     return highways.distance(buildings).idxmin()
 
+def dist_buildings_highways(buildings, highways):
+    """
+    Return distance to highway that the building is closest to.
+
+    Parameters
+    ----------
+    buildings : geodataframe
+        polygons (geometry?) receiving id of nearest highway.
+
+    highways : geodataframe
+        streets to transfering id numbers onto buildings.
+
+    Check this does actually return an integer.
+
+    Returns
+    -------
+    integer
+    """
+    return highways.distance(buildings).min()
+
 def join_buildings_street_id(buildings, streets):
     """
     Add index number of nearest street to buildings geodataframe.
@@ -357,7 +451,29 @@ def join_buildings_street_id(buildings, streets):
 
     return buildings
 
-def form_factor(poly_gdf):
+def join_buildings_street_dist(buildings_proj, streets_proj):
+    """
+    Add distance to nearest street centreline to buildings geodataframe.
+
+    Parameters
+    ----------
+    buildings_proj : geodataframe
+        projected polygons (geometry?) receiving id of enclosing polygons.
+
+    streets_proj : geodataframe
+        projected streets to transfer id numbers onto buildings.
+
+    Returns
+    -------
+    GeoDataFrame
+    """
+
+    buildings_proj['street_dist'] = buildings_proj.geometry.apply(dist_buildings_highways, args=(streets_proj,))
+    buildings_proj['street_dist'] = buildings_proj['street_dist'].round(2)
+
+    return buildings_proj
+
+def gen_net_to_gross(net_gdf, gross_gdf):
     """
     Returns a geodataframe of  smallest enclosing 'circles' (shapely polygons)
     generated from the input geodataframe of polygons.
@@ -375,146 +491,44 @@ def form_factor(poly_gdf):
     -------
     GeoDataFrame
     """
-    # takes a gdf with polgon geometry and returns a new gdf of smallest enclosing
-    # circles with their areas (in hectares) centroids and regularity ratio
+    net_gdf['net_to_gross'] = round(net_gdf.area/gross_gdf.area, 2)
+    
+    return net_gdf
 
-    # create a new gdf that includes the geometry of the old gdf and its area
-    circles_gdf = poly_gdf.filter(['geometry', 'area_net_ha'])
+def gen_regularity(gdf):
+    """
+    Returns a geodataframe of  smallest enclosing 'circles' (shapely polygons)
+    generated from the input geodataframe of polygons.
+
+    It includes columns that contain the area of the original polygon and the
+    circles and the 'form factor' ratio of the area of the polygon to the area
+    of the enclosing circle.
+
+    Parameters
+    ----------
+    poly_gdf : geodataframe
+        a geodataframe containing polygons.
+
+    Returns
+    -------
+    GeoDataFrame
+    """
+    gdf_regularity = gdf['geometry'].copy()
+    gdf_regularity['original_area'] = gdf_regularity.area
+
     # replace the polygon geometry with the smallest enclosing circle
-    circles_gdf['geometry'] = circles_gdf['geometry'].apply(circlizer)
+    gdf_regularity['geometry'] = gdf_regularity['geometry'].apply(circlizer)
 
     # calculate the area of the smallest enclosing circles
-    circles_gdf['area_sec_ha'] = circles_gdf.area/10000
+    gdf_regularity['circle_area'] = gdf_regularity.area
 
     # calculate 'regularity' as "the ratio between the area of the block and
     # the area of the circumscribed circle C" Barthelemy M. and Louf R., (2014)
-    circles_gdf['form_factor'] = circles_gdf['area_net_ha']/circles_gdf['area_sec_ha']
+    gdf_regularity['regularity'] = gdf_regularity['original_area']/gdf_regularity['circle_area']
 
-    return circles_gdf
+    return gdf_regularity
 
-def graph_to_polygons(G, node_geometry=True, fill_edge_geometry=True):
-    """
-    Convert the edges of a graph into a GeoDataFrame of polygons.
-
-    Parameters
-    ----------
-    G : networkx multidigraph
-
-    node_geometry : bool
-        if True, create a geometry column from node x and y data
-
-    fill_edge_geometry : bool
-        if True, fill in missing edge geometry fields using origin and
-        destination nodes
-    Returns
-    -------
-    GeoDataFrame
-        gdf_polygons
-    """
-
-    # create a list to hold our edges, then loop through each edge in the
-    # graph
-    edges = []
-    for u, v, key, data in G.edges(keys=True, data=True):
-
-        # for each edge, add key and all attributes in data dict to the
-        # edge_details
-        edge_details = {'u':u, 'v':v, 'key':key}
-        for attr_key in data:
-            edge_details[attr_key] = data[attr_key]
-
-        # if edge doesn't already have a geometry attribute, create one now
-        # if fill_edge_geometry==True
-        if 'geometry' not in data:
-            if fill_edge_geometry:
-                point_u = Point((G.nodes[u]['x'], G.nodes[u]['y']))
-                point_v = Point((G.nodes[v]['x'], G.nodes[v]['y']))
-                edge_details['geometry'] = LineString([point_u, point_v])
-            else:
-                edge_details['geometry'] = np.nan
-
-        edges.append(edge_details)
-
-    # extract the edge geometries from the list of edge dictionaries
-    edge_geometry = []
-
-    for edge in edges:
-        edge_geometry.append(edge['geometry'])
-
-    # create a list to hold our polygons
-    polygons = []
-
-    polygons = list(polygonize(edge_geometry))
-
-    # Create a GeoDataFrame from the list of polygons and set the CRS
-
-    # an option here is to feed it a list of dictionaries with a 'geometry' key
-    # this would be one step e.g.
-    # gdf_polys = gpd.GeoDataFrame(polygons)
-
-    # Greate an empty GeoDataFrame
-    gdf_polygons = gpd.GeoDataFrame()
-
-    # Create a new column called 'geometry' to the GeoDataFrame
-    gdf_polygons['geometry'] = None
-
-    # Assign the list of polygons to the geometry column
-    gdf_polygons.geometry = polygons
-
-    # Set the crs
-    gdf_polygons.crs = G.graph['crs']
-    gdf_polygons.gdf_name = '{}_polygons'.format(G.graph['name'])
-
-    return gdf_polygons
-
-def gen_city_blocks_gross(street_graph, city_blocks):
-    """
-    Generate approximate gross urban blocks by polygonizing the highway network.
-
-    It uses a geodataframe of net urban blocks (downloaded as
-    'place = city_block') to unify fragments to give better results. It also
-    transfers measures of the gross urban blocks onto the net urban blocks for
-    calculations.
-
-    Parameters
-    ----------
-    street_graph : networkx multidigraph
-        street centrelines
-
-    city_blocks : GeoDataFrame
-        net urban blocks used to unify fragments
-
-    Returns
-    -------
-    GeoDataFrame
-    """
-    ### BOTH PROJECTED - NEED TO CHECK CRS HERE?
-
-    # polygonize the highway network & return it as a GeoDataFrame
-    # this will include edge polygons that are removed in the next steps
-    city_blocks_gross = graph_to_polygons(street_graph, node_geometry=False)
-
-    # transfer attributes from city_blocks_net to city_blocks_gross where they intersect
-    city_blocks_gross = gpd.sjoin(city_blocks_gross, city_blocks, how="left", op='intersects')
-    # dissolve together city_blocks_gross polygons that intersect with the same city_blocks polygon
-    city_blocks_gross.rename(columns={'index_right' : 'block_id'}, inplace=True)
-    city_blocks_gross = city_blocks_gross.dissolve(by='block_id')
-    # convert the index to int
-    city_blocks_gross.index = city_blocks_gross.index.astype(int)
-    # remove unecessary columns
-    city_blocks_gross = city_blocks_gross[['place', 'geometry']]
-    # change text city_block to city_block_gross
-    city_blocks_gross["place"] = city_blocks_gross['place'].str.replace('city_block', 'city_block_gross')
-    # give the dataframe a name
-    city_blocks_gross.name = 'city_blocks_gross'
-    # calculate gross area in hectares (not meters) and include as a column in city_blocks_net
-    city_blocks['area_gross_ha'] = city_blocks_gross.area/10000
-    # calculate the net to gross ratio for the blocks and include as a column in city_blocks_net
-    city_blocks['net_to_gross'] = round(city_blocks.area_net_ha/city_blocks.area_gross_ha, 2)
-
-    return (city_blocks, city_blocks_gross)
-
-def join_city_blocks_building_data(city_blocks, buildings):
+def join_places_building_data(places_proj, buildings_proj):
     """
     Add summary building data onto city blocks.
 
@@ -523,23 +537,22 @@ def join_city_blocks_building_data(city_blocks, buildings):
 
     Parameters
     ----------
-    city_blocks : geodataframe
+    places_proj : geodataframe
 
-    buildings : geodataframe
+    buildings_proj : geodataframe
 
     Returns
     -------
     GeoDataFrame
     """
-    building_areas_by_block=buildings[['footprint_m2','total_GEA_m2']].groupby([buildings['block_id']]).sum()
+    column_id = places_proj.gdf_name + '_id'
+    building_areas_by_place=buildings_proj[['footprint_m2','total_GEA_m2']].groupby([buildings_proj[column_id]]).sum()
     # next line may not be necessary, don't want to create entry '0' in gdf of city_blocks
-    building_areas_by_block = building_areas_by_block.drop([0])
+    building_areas_by_place = building_areas_by_place.drop([0])
 
-    city_blocks = city_blocks.merge(building_areas_by_block, on = 'block_id')
+    places_proj = places_proj.merge(building_areas_by_place, on = column_id)
 
-    city_blocks['GSI_net'] = city_blocks['footprint_m2']/(city_blocks['area_net_ha']*10000)
-    city_blocks['GSI_gross'] = city_blocks['footprint_m2']/(city_blocks['area_gross_ha']*10000)
-    city_blocks['FSI_net'] = city_blocks['total_GEA_m2']/(city_blocks['area_net_ha']*10000)
-    city_blocks['FSI_gross'] = city_blocks['total_GEA_m2']/(city_blocks['area_gross_ha']*10000)
+    places_proj['GSI'] = places_proj['footprint_m2']/(places_proj['area_m2'])
+    places_proj['FSI'] = places_proj['total_GEA_m2']/(places_proj['area_m2'])
 
-    return city_blocks
+    return places_proj
