@@ -186,7 +186,7 @@ def net_city_blocks_from_places(place_gdf):
 
     return net_city_blocks
 
-def gen_gross_city_blocks(street_graph, net_city_blocks):
+def gen_gross_city_blocks(street_graph, net_city_blocks=None):
     """
     Generate approximate gross urban blocks by polygonizing the highway network.
 
@@ -209,23 +209,23 @@ def gen_gross_city_blocks(street_graph, net_city_blocks):
     # this will include edge polygons that are removed in the next steps
     gross_city_blocks = graph_to_polygons(street_graph, node_geometry=False)
 
-    # transfer attributes from city_blocks_net to city_blocks_gross where they intersect
-    gross_city_blocks = gpd.sjoin(gross_city_blocks, net_city_blocks, how="left", op='intersects')
-    # dissolve together gross_city_blocks polygons that intersect with the same net_city_blocks polygon
-    gross_city_blocks.rename(columns={'index_right' : 'net_city_block_id'}, inplace=True)
-    gross_city_blocks = gross_city_blocks.dissolve(by='net_city_block_id')
-    # convert the index to int
-    gross_city_blocks.index = gross_city_blocks.index.astype(int)
-    # remove unecessary columns
-    gross_city_blocks = gross_city_blocks[['place', 'geometry']]
-    # change text city_block to city_block_gross
-    gross_city_blocks["place"] = gross_city_blocks['place'].str.replace('net_city_block', 'gross_city_block')
+    if net_city_blocks is not None:
+        # transfer attributes from city_blocks_net to city_blocks_gross where they intersect
+        gross_city_blocks = gpd.sjoin(gross_city_blocks, net_city_blocks, how="left", op='intersects')
+        # dissolve together gross_city_blocks polygons that intersect with the same net_city_blocks polygon
+        gross_city_blocks.rename(columns={'index_right' : 'net_city_block_id'}, inplace=True)
+        gross_city_blocks = gross_city_blocks.dissolve(by='net_city_block_id')
+        # convert the index to int
+        gross_city_blocks.index = gross_city_blocks.index.astype(int)
+        # remove unecessary columns
+        gross_city_blocks = gross_city_blocks[['place', 'geometry']]
+        # change text city_block to city_block_gross
+        gross_city_blocks["place"] = gross_city_blocks['place'].str.replace('net_city_block', 'gross_city_block')
  
     # name the dataframe
     gross_city_blocks.gdf_name = 'gross_city_blocks'
     # name the index
     gross_city_blocks.index.name='gross_city_blocks_id'
-
 
     return gross_city_blocks
 
