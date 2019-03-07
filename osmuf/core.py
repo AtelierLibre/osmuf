@@ -81,14 +81,15 @@ def places_from_point(point, distance, place_type='city_block'):
 
     # use osmnx to download 'place' polygons
     places = ox.footprints_from_point(point, distance, footprint_type="place")
-    # filter place polygons to retain only city blocks
+    # filter place polygons to retain only those of 'place_type'
     places = places.loc[places['place'] == place_type]
     # keep only two columns 'place' and 'geometry'
     places = places[['place','geometry']].copy()
-    # project and measure places
-    # places = project_and_measure_gdf(places)
+
     # name the index
-    places.index.name='place_id'
+    places.index.name=place_type + '_id'
+    # name the dataframe
+    places.gdf_name=place_type
 
     return places
 
