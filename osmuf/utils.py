@@ -12,13 +12,15 @@ import osmnx as ox
 
 import osmuf.smallestenclosingcircle as sec
 
-from shapely.geometry import Point, Polygon, MultiPolygon
+from shapely.geometry import Point
 from shapely.geometry import LineString
+from shapely.geometry import Polygon, MultiPolygon
+
 from shapely.ops import polygonize
 
-# extract the coordinates of shapely polygons and multipolygons
-# as a list of tuples
 def extract_poly_coords(geom):
+    # extract the coordinates of shapely polygons and multipolygons
+    # as a list of tuples
     if geom.type == 'Polygon':
         exterior_coords = geom.exterior.coords[:]
         interior_coords = []
@@ -33,13 +35,11 @@ def extract_poly_coords(geom):
             interior_coords += epc['interior_coords']
     else:
         raise ValueError('Unhandled geometry type: ' + repr(geom.type))
-#    return {'exterior_coords': exterior_coords,
-#            'interior_coords': interior_coords}
+
     return exterior_coords + interior_coords
 
-
-# takes a shapely polygon or multipolygon and returns a shapely circle polygon
 def circlizer(x):
+    # takes a shapely polygon or multipolygon and returns a shapely circle polygon
     (cx, cy, buff) = sec.make_circle(extract_poly_coords(x))
     donut = Point(cx, cy).buffer(buff)
 
@@ -47,14 +47,14 @@ def circlizer(x):
 
 def dict_to_gdf(place_dict):
 
-    # 0. INVERT COORDINATES FROM LAT, LONG TO LONG, LAT
-    place_dict['coordinates']=(place_dict['coordinates'][1], place_dict['coordinates'][0])
+    # 0. INVERT COORDINATES FROM LAT, LONG TO LONG, LAT # changed 'coordinates' to 'geometry'
+    place_dict['geometry']=(place_dict['coordinates'][1], place_dict['coordinates'][0])
 
     # 1. convert dict to Pandas dataframe
     place_df = pd.DataFrame([place_dict])
 
-    # 2. create 'geometry' column as tuple of Latitude and Longitude
-    place_df = place_df.rename(columns={'coordinates': 'geometry'})
+    # 2. create 'geometry' column as tuple of Latitude and Longitude # unecessary
+    # place_df = place_df.rename(columns={'coordinates': 'geometry'})
 
     # 3. transform tuples into Shapely Points
     place_df['geometry'] = place_df['geometry'].apply(Point)
@@ -124,6 +124,11 @@ def footprints_from_gdf(gdf, footprint_type='building'):
     footprints.gdf_name = footprint_type
 
     return footprints
+
+def extend_line_by_factor(p1,p2, extension_factor):
+    'Creates a line from p1 through p2 extended by factor'
+    p3 = (p1.x+extension_factor*(p2.x-p1.x), p1.y+extension_factor*(p2.y-p1.y))
+    return LineString([p1,p3])
 
 def graph_to_polygons(G, node_geometry=True, fill_edge_geometry=True):
     """

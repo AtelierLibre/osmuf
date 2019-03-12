@@ -18,6 +18,7 @@ import matplotlib.pyplot as plt
 
 from .utils import graph_to_polygons, extract_poly_coords, circlizer
 from .utils import dict_to_gdf, gdf_convex_hull, footprints_from_gdf
+from .utils import extend_line_by_factor
 
 def study_area_from_point(point, distance):
     """
@@ -246,6 +247,8 @@ def buildings_from_gdf(gdf):
     buildings = footprints_from_gdf(gdf)
     # name the dataframe
     buildings.gdf_name = 'buildings'
+    # name the index
+    buildings.index.name='building_id'
 
     return buildings
 
@@ -423,11 +426,9 @@ def dist_buildings_highways(buildings, highways):
     highways : geodataframe
         streets to transfering id numbers onto buildings.
 
-    Check this does actually return an integer.
-
     Returns
     -------
-    integer
+    float
     """
     return highways.distance(buildings).min()
 
@@ -557,3 +558,29 @@ def join_places_building_data(places_proj, buildings_proj):
     places_proj['FSI'] = places_proj['total_GEA_m2']/(places_proj['area_m2'])
 
     return places_proj
+
+def gen_building_depth(row):
+    # get the id of the street nearest the building
+    street_id = row.street_id
+    # extract street geometry as shapely linestring
+    street_linestring = streets_proj.loc[street_id, 'geometry']
+    # extract building centroid as shapely point
+    building_centroid = row.geometry.centroid
+    # distance along line to nearest point
+    dist_along_line = street_linestring.project(building_centroid)
+    # coordinates of the nearest point as shapely point
+    point_on_line = street_linestring.interpolate(dist_along_line)
+    # line projected back through centroid extended by factor
+    projected_line = extend_line_by_factor(point_on_line, building_centroid, 10)
+    # extract buildings outline as shapely linestring
+    building_outline = row.geometry.boundary
+    # calculate all points of intersection between projected line and building outline
+    intersection_points = projected_line.intersection(building_outline)
+    # calculate the building depth as shapely linestring from first intersection point to last
+    if intersection_points.geom_type == 'MultiPoint':
+        building_depth=LineString([intersection_points[0], intersection_points[-1]])
+        return building_depth
+    elif intersection_points.geom_type == 'Point':
+        pass
+    else:
+        pass
