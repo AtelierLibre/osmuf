@@ -1,0 +1,7 @@
+local_images/
+local_notebooks/
+notebooks/.ipynb_checkpoints/
+osmuf.egg-info/
+osmuf/__pycache__/
+osmuf/core.py~
+osmuf/superseded/
