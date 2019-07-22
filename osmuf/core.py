@@ -22,10 +22,9 @@ from .utils import extend_line_by_factor
 
 def study_area_from_point(point, distance):
     """
-    Define study area from center point and distance to edge of bounding box.
+    Define a study area from a center point and distance to edge of bounding box.
 
-    Return this as a projected GeoDataFrame for plotting
-    and for summary data.
+    Returns a GeoDataFrame for plotting and for summary data.
 
     Parameters
     ----------
@@ -35,6 +34,39 @@ def study_area_from_point(point, distance):
         how many meters the north, south, east, and west sides of the box should
         each be from the point
 
+    Returns
+    -------
+    GeoDataFrame
+    """
+    # use osmnx to define the bounding box
+    bbox = ox.bbox_from_point(point, distance)
+
+    # split the tuple
+    n, s, e, w = bbox
+
+    # Create GeoDataFrame
+    study_area = gpd.GeoDataFrame()
+    # create geometry column with bounding box polygon
+    study_area.loc[0, 'geometry'] = Polygon([(w, s), (w, n), (e, n), (e, s)])
+    # set the name of the gdf
+    study_area.gdf_name = 'study_area'
+
+    study_area.crs = {'init' :'epsg:4326'}
+
+    return study_area
+
+def projected_study_area_from_point(point, distance):
+    """
+    Define study area from center point and distance to edge of bounding box.
+    Return this as a projected GeoDataFrame for plotting
+    and for summary data.
+    Parameters
+    ----------
+    point : tuple
+        the (lat, lon) point to create the bounding box around
+    distance : int
+        how many meters the north, south, east, and west sides of the box should
+        each be from the point
     Returns
     -------
     GeoDataFrame
@@ -84,11 +116,10 @@ def places_from_point(point, distance, place_type='city_block'):
     places = ox.footprints_from_point(point, distance, footprint_type="place")
     # filter place polygons to retain only those of 'place_type'
     places = places.loc[places['place'] == place_type]
-    # keep only two columns 'place' and 'geometry'
-    places = places[['place','geometry']].copy()
-
-    # name the index
-    places.index.name=place_type + '_id'
+    # write the index into a column
+    places[place_type + '_id'] = places.index
+    # reindex the columns
+    places = places.reindex(columns=[place_type + '_id', 'place', 'geometry'])
     # name the dataframe
     places.gdf_name=place_type
 
@@ -160,6 +191,30 @@ def street_graph_from_gdf(gdf, network_type='all'):
 
     return street_graph
 
+def streets_from_street_graph(street_graph):
+    """
+    Convert a networkx multidigraph to a GeoDataFrame.
+
+    Primarily here to allow future filtering of streets data for osmuf purposes
+
+    Parameters
+    ----------
+    street_graph : networkx multidigraph
+
+    Returns
+    -------
+    GeoDataFrame
+    """
+
+    # convert to gdf
+    streets = ox.graph_to_gdfs(street_graph, nodes=False)
+    # write index into a column
+    streets['street_id'] = streets.index
+
+    # insert filtering/processing here for OSMuf purposes
+
+    return streets
+
 def net_city_blocks_from_places(place_gdf):
     """
     Filter place gdf to retain net city_blocks and minimal columns.
@@ -175,6 +230,7 @@ def net_city_blocks_from_places(place_gdf):
 
     # filter place polygons to retain only city blocks
     net_city_blocks = place_gdf.loc[place_gdf['place'] == 'city_block']
+    
     # keep only two columns 'place' and 'geometry'
     net_city_blocks = net_city_blocks[['place','geometry']].copy()
 
@@ -183,6 +239,8 @@ def net_city_blocks_from_places(place_gdf):
 
     # name the dataframe - osmnx uses 'gdf_name' not sure if this is standard
     net_city_blocks.gdf_name = 'net_city_blocks'
+    # write the index into a column
+    net_city_blocks['city_block_id'] = net_city_blocks.index
     # name the index
     net_city_blocks.index.name='net_city_blocks_id'
 
@@ -219,21 +277,23 @@ def gen_gross_city_blocks(street_graph, net_city_blocks=None):
         gross_city_blocks = gross_city_blocks.dissolve(by='net_city_block_id')
         # convert the index to int
         gross_city_blocks.index = gross_city_blocks.index.astype(int)
-        # remove unecessary columns
-        gross_city_blocks = gross_city_blocks[['place', 'geometry']]
         # change text city_block to city_block_gross
         gross_city_blocks["place"] = gross_city_blocks['place'].str.replace('net_city_block', 'gross_city_block')
  
     # name the dataframe
     gross_city_blocks.gdf_name = 'gross_city_blocks'
-    # name the index
-    gross_city_blocks.index.name='gross_city_blocks_id'
+    # write the index into a column
+    gross_city_blocks['city_block_id'] = gross_city_blocks.index
+    # reindex the columns
+    gross_city_blocks = gross_city_blocks.reindex(columns=['city_block_id', 'place', 'geometry'])
+    # delete the index name
+    del gross_city_blocks.index.name
 
     return gross_city_blocks
 
 def buildings_from_gdf(gdf):
     """
-    Download buildings within convex hull around a GeoDataFrame.
+    Download buildings within a convex hull around a GeoDataFrame.
 
     Parameters
     ----------
@@ -245,35 +305,14 @@ def buildings_from_gdf(gdf):
     """
     # download buildings within boundary
     buildings = footprints_from_gdf(gdf)
+    # write the index into a column
+    buildings['building_id'] = buildings.index
+    # reindex the columns
+    buildings = buildings.reindex(columns=['building_id', 'building', 'building:levels', 'geometry'])
     # name the dataframe
     buildings.gdf_name = 'buildings'
-    # name the index
-    buildings.index.name='building_id'
 
     return buildings
-
-def streets_proj_from_street_graph(street_graph):
-    """
-    Project and convert networkx multidigraph to a GeoDataFrame.
-
-    Primarily here to allow future filtering of streets data for osmuf purposes
-
-    Parameters
-    ----------
-    street_graph : networkx multidigraph
-
-    Returns
-    -------
-    GeoDataFrame
-    """
-    # project the network to UTM
-    street_graph = ox.project_graph(street_graph)
-    # convert to gdf
-    streets_proj = ox.graph_to_gdfs(street_graph, nodes=False)
-
-    # insert filtering/processing here for OSMuf purposes
-
-    return streets_proj
 
 def merge_gdfs(gdf_list):
     """
@@ -323,9 +362,9 @@ def project_measure_gdf(gdf):
 
     return gdf_proj
 
-def project_measure_buildings(buildings):
+def measure_buildings(buildings_proj):
     """
-    Project, filter and measure GeoDataFrame of buildings.
+    Measure GeoDataFrame of buildings.
 
     Keep only building height and area information. Generate measures of footprint size and total
     Gross External Area (footprint x number of storeys).
@@ -339,26 +378,109 @@ def project_measure_buildings(buildings):
     -------
     GeoDataFrame
     """
-    # project to UTM
-    buildings_proj = ox.project_gdf(buildings)
-    # create filtered copy with only key columns, creating 'building:levels' if not present
-    buildings_proj = buildings_proj.reindex(columns=['building','building:levels','geometry'])
 
-    ### THERE ACTUALLY IS AN INTEGER TYPE WITH NAN, MAY BE BETTER
+    # convert 'building:levels' to float then Int64 (with Nan) one step is not possible
+    buildings_proj['building:levels']=buildings_proj['building:levels'].astype('float').astype('Int64')
 
-    # convert 'building:levels' to float from object (int doesn't support NaN)
-    buildings_proj['building:levels']=buildings_proj['building:levels'].astype(float)
-    # convert fill NaN with zeroes to allow conversion to int
-    buildings_proj = buildings_proj.fillna({'building:levels': 0})
-    # convert to int
-    buildings_proj["building:levels"] = pd.to_numeric(buildings_proj['building:levels'], downcast='integer')
-
+    # fill NaN with zeroes
+    # buildings_proj = buildings_proj.fillna({'building:levels': 0})
+ 
     # generate footprint areas
-    buildings_proj['footprint_m2']=buildings_proj.area
+    buildings_proj['footprint_m2']=buildings_proj.area.round(decimals=1)
     # generate total_GEA
-    buildings_proj['total_GEA_m2']=buildings_proj.area*buildings_proj['building:levels']
+    buildings_proj['total_GEA_m2']=(buildings_proj.area*buildings_proj['building:levels']).round(decimals=1)
 
     return buildings_proj
+
+def measure_city_blocks(net_city_blocks_gdf, gross_city_blocks_gdf):
+    """
+    Returns a geodataframe of  smallest enclosing 'circles' (shapely polygons)
+    generated from the input geodataframe of polygons.
+
+    It includes columns that contain the area of the original polygon and the
+    circles and the 'form factor' ratio of the area of the polygon to the area
+    of the enclosing circle.
+
+    Parameters
+    ----------
+    poly_gdf : geodataframe
+        a geodataframe containing polygons.
+
+    Returns
+    -------
+    GeoDataFrame
+    """
+    net_city_blocks_gdf['net_area_m2'] = net_city_blocks_gdf.area.round(decimals=2)
+    net_city_blocks_gdf['frontage_m'] = net_city_blocks_gdf.length.round(decimals=2)
+    net_city_blocks_gdf['PAR'] = (net_city_blocks_gdf.length/net_city_blocks_gdf.area).round(decimals=3)
+    net_city_blocks_gdf['gross_area_m2'] = gross_city_blocks_gdf.area.round(decimals=2)
+    net_city_blocks_gdf['net:gross'] = (net_city_blocks_gdf.area/gross_city_blocks_gdf.area).round(decimals=2)
+    net_city_blocks_gdf['inner_streets_m'] = gross_city_blocks_gdf['inner_streets_m'].round(decimals=2)
+    net_city_blocks_gdf['outer_streets_m'] = gross_city_blocks_gdf['outer_streets_m'].round(decimals=2)
+    net_city_blocks_gdf['network_length_m'] = ((net_city_blocks_gdf['outer_streets_m']/2) + net_city_blocks_gdf['inner_streets_m']).round(decimals=2)
+    net_city_blocks_gdf['network_density_m_ha'] = gross_city_blocks_gdf['network_density_m_ha'].round(decimals=2)
+    net_city_blocks_gdf['frontage_density_m_ha'] = (net_city_blocks_gdf['frontage_m']/net_city_blocks_gdf['net_area_m2']).round(decimals=4)
+
+    # Change the order (the index) of the columns
+    columnsTitles = ['city_block_id', 'place', 'frontage_m', 'net_area_m2', 'PAR', 'gross_area_m2',
+                     'net:gross', 'inner_streets_m', 'outer_streets_m', 'network_length_m', 'network_density_m_ha', 'frontage_density_m_ha', 'geometry']
+    net_city_blocks_gdf = net_city_blocks_gdf.reindex(columns=columnsTitles)
+
+    return net_city_blocks_gdf
+
+def measure_network_density(streets_for_networkd_prj, gross_city_blocks_prj):
+    """
+    Adds network density (m/ha.) onto a gdf of gross urban blocks
+
+    Requires a gdf of streets to overlay with the gross city blocks. Streets
+    that are within a gross urban blocks (i.e. do not coincide with its perimeter)
+    have the block id added to them. The length of these streets are then aggregated
+    by block id and their complete length added to the gross city blocks gdf. Half
+    the lenght of the perimeter (i.e. the bounding roads) are then added to the gdf
+    as well and the network density calculated as the sum of these two numbers divided
+    by the gross area of the block.
+
+    Parameters
+    ----------
+    streets_for_networ_prj : geodataframe
+        a projected gdf of streets
+    gross_city_blocks_prj: geodataframe
+        a projected gdf of gross city blocks
+
+    Returns
+    -------
+    gross_city_blocks_prj
+        GeoDataFrame
+    """
+    # OSMnx returns some highway values as lists, this converts them to strings
+    streets_for_networkd_prj['highway'] = streets_for_networkd_prj['highway'].apply(lambda x: ', '.join(x) if type(x) is list else x)
+
+    # make a new gdf which only contains street fragments completely within a gross city block
+    streets_in_gross_blocks = gpd.sjoin(streets_for_networkd_prj, gross_city_blocks_prj, how="inner", op="within")
+
+    # Write the length of these inner streets into a new column 'inner_streets_m'
+    streets_in_gross_blocks['inner_streets_m'] = streets_in_gross_blocks.length.round(decimals=1)
+
+    # aggregate the total length of inner streets for each block
+    inner_streets_agg_by_block = streets_in_gross_blocks.groupby(['city_block_id']).sum().round(decimals=2)
+
+    # reindex to keep onlt the columns necessary
+    keep_columns = ['inner_streets_m']
+    inner_streets_agg_by_block = inner_streets_agg_by_block.reindex(columns=keep_columns)
+
+    # merge the total inner street length onto the gross blocks
+    gross_city_blocks_prj = gross_city_blocks_prj.merge(inner_streets_agg_by_block, how='outer', left_index=True, right_index=True)
+
+    # Fill NaN with zeroes
+    gross_city_blocks_prj.fillna(0, axis=1, inplace=True)
+
+    gross_city_blocks_prj['outer_streets_m'] = gross_city_blocks_prj.length.round(decimals=2)
+    gross_city_blocks_prj['gross_area_ha'] = (gross_city_blocks_prj.area/10_000).round(decimals=4)
+    gross_city_blocks_prj['network_density_m_ha'] = (((gross_city_blocks_prj['outer_streets_m']/2)
+                                                      +(gross_city_blocks_prj['inner_streets_m']))
+                                                     /((gross_city_blocks_prj.area/10_000))).round(decimals=2)
+
+    return gross_city_blocks_prj
 
 def join_buildings_place_id(buildings, places):
     """
@@ -385,7 +507,7 @@ def join_buildings_place_id(buildings, places):
     # was 'intersects', 'contains', 'within'
     buildings = gpd.sjoin(buildings, places[['geometry']], how="left", op='intersects')
 
-    place_column_name = places.gdf_name + '_id'
+    place_column_name = 'city_block_id'
     buildings.rename(columns={'index_right' : place_column_name}, inplace=True)
 
     # convert any NaN values in block_id to zero, then convert to int
@@ -515,18 +637,20 @@ def gen_regularity(gdf):
     -------
     GeoDataFrame
     """
-    gdf_regularity = gdf['geometry'].copy()
-    gdf_regularity['original_area'] = gdf_regularity.area
+    gdf_regularity = gdf[['city_block_id', 'geometry']].copy()
+
+    # write the area of each polygon into a column
+    gdf_regularity['poly_area_m2'] = gdf.area.round(decimals=1)
 
     # replace the polygon geometry with the smallest enclosing circle
     gdf_regularity['geometry'] = gdf_regularity['geometry'].apply(circlizer)
 
     # calculate the area of the smallest enclosing circles
-    gdf_regularity['circle_area'] = gdf_regularity.area
+    gdf_regularity['SEC_area_m2'] = gdf_regularity.area.round(decimals=1)
 
-    # calculate 'regularity' as "the ratio between the area of the block and
+    # calculate 'regularity' as "the ratio between the area of the polygon and
     # the area of the circumscribed circle C" Barthelemy M. and Louf R., (2014)
-    gdf_regularity['regularity'] = gdf_regularity['original_area']/gdf_regularity['circle_area']
+    gdf_regularity['regularity'] = gdf_regularity['poly_area_m2']/gdf_regularity['SEC_area_m2']
 
     return gdf_regularity
 
@@ -547,15 +671,18 @@ def join_places_building_data(places_proj, buildings_proj):
     -------
     GeoDataFrame
     """
-    column_id = places_proj.gdf_name + '_id'
-    building_areas_by_place=buildings_proj[['footprint_m2','total_GEA_m2']].groupby([buildings_proj[column_id]]).sum()
-    # next line may not be necessary, don't want to create entry '0' in gdf of city_blocks
-    building_areas_by_place = building_areas_by_place.drop([0])
+    building_areas_by_place=buildings_proj[['footprint_m2','total_GEA_m2']].groupby(buildings_proj['city_block_id']).sum()
+    # if there are buildings not associated with a city_block they aggregate under 0
+    # if this happens remove them from the dataframe
+    if building_areas_by_place.index.contains(0):
+        building_areas_by_place = building_areas_by_place.drop([0])
 
-    places_proj = places_proj.merge(building_areas_by_place, on = column_id)
+    places_proj = places_proj.merge(building_areas_by_place, on = 'city_block_id')
 
-    places_proj['GSI'] = places_proj['footprint_m2']/(places_proj['area_m2'])
-    places_proj['FSI'] = places_proj['total_GEA_m2']/(places_proj['area_m2'])
+    places_proj['net_GSI'] = (places_proj['footprint_m2']/places_proj.area).round(decimals=3)
+    places_proj['net_FSI'] = (places_proj['total_GEA_m2']/places_proj.area).round(decimals=3)
+    places_proj['gross_GSI'] = (places_proj['footprint_m2']/places_proj['gross_area_m2']).round(decimals=3)
+    places_proj['gross_FSI'] = (places_proj['total_GEA_m2']/places_proj['gross_area_m2']).round(decimals=3)
 
     return places_proj
 
