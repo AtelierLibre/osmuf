@@ -295,7 +295,7 @@ def ax_map_FSI_with_building_heights(ax_, study_area, city_blocks_gross, city_bl
 
     ax_map_settings(ax_, study_area)
 
-def ax_map_network_density(ax_, study_area, city_blocks_gross, city_blocks, buildings):
+def ax_map_network_density(ax_, study_area, city_blocks_gross, city_blocks, buildings, streets_for_networkd):
 
     add_titlebox(ax_, 'Network Density (m/ha)')
 
@@ -304,13 +304,14 @@ def ax_map_network_density(ax_, study_area, city_blocks_gross, city_blocks, buil
 
     # show city blocks coloured by their net_to_gross, labeled with sizes and ratio
     city_blocks_gross.plot(ax=ax_, column='network_density_m_ha', cmap='Greens', alpha=0.5, vmin=0, vmax=800, legend=True)
-    city_blocks_gross.plot(ax=ax_, facecolor='None', edgecolor='white', linewidth=1)
 
     # buildings with unknown storeys as hatched
     buildings[buildings['building:levels']==0].plot(ax=ax_, color='grey', edgecolor='white', hatch='///')
 
     # buildings with known storeys solid
     buildings[buildings['building:levels']>0].plot(ax=ax_, color='grey', edgecolor='None')
+
+    streets_for_networkd.plot(ax=ax_, facecolor='None', edgecolor='green', linewidth=1)
 
     for idx, row in city_blocks_gross.iterrows():
         s = str(round((row['network_density_m_ha'])))
