@@ -379,11 +379,11 @@ def measure_buildings(buildings_proj):
     GeoDataFrame
     """
 
-    # convert 'building:levels' to float then Int64 (with Nan) one step is not possible
-    buildings_proj['building:levels']=buildings_proj['building:levels'].astype('float').astype('Int64')
-
     # fill NaN with zeroes
-    # buildings_proj = buildings_proj.fillna({'building:levels': 0})
+    buildings_proj = buildings_proj.fillna({'building:levels': 0})
+
+    # convert 'building:levels' to float then Int64 (with Nan) one step is not possible
+    buildings_proj['building:levels']=buildings_proj['building:levels'].astype('float').astype('int')
  
     # generate footprint areas
     buildings_proj['footprint_m2']=buildings_proj.area.round(decimals=1)
@@ -410,20 +410,26 @@ def measure_city_blocks(net_city_blocks_gdf, gross_city_blocks_gdf):
     -------
     GeoDataFrame
     """
+    # net urban block measures
     net_city_blocks_gdf['net_area_m2'] = net_city_blocks_gdf.area.round(decimals=2)
     net_city_blocks_gdf['frontage_m'] = net_city_blocks_gdf.length.round(decimals=2)
-    net_city_blocks_gdf['PAR'] = (net_city_blocks_gdf.length/net_city_blocks_gdf.area).round(decimals=3)
+    net_city_blocks_gdf['PAR'] = (net_city_blocks_gdf.length/net_city_blocks_gdf.area).round(decimals=4)
+    net_city_blocks_gdf['frontage_density_m_m2'] = (net_city_blocks_gdf['frontage_m']/net_city_blocks_gdf['net_area_m2']).round(decimals=4)
+
+    # gross urban block measures
     net_city_blocks_gdf['gross_area_m2'] = gross_city_blocks_gdf.area.round(decimals=2)
-    net_city_blocks_gdf['net:gross'] = (net_city_blocks_gdf.area/gross_city_blocks_gdf.area).round(decimals=2)
     net_city_blocks_gdf['inner_streets_m'] = gross_city_blocks_gdf['inner_streets_m'].round(decimals=2)
     net_city_blocks_gdf['outer_streets_m'] = gross_city_blocks_gdf['outer_streets_m'].round(decimals=2)
     net_city_blocks_gdf['network_length_m'] = ((net_city_blocks_gdf['outer_streets_m']/2) + net_city_blocks_gdf['inner_streets_m']).round(decimals=2)
-    net_city_blocks_gdf['network_density_m_ha'] = gross_city_blocks_gdf['network_density_m_ha'].round(decimals=2)
-    net_city_blocks_gdf['frontage_density_m_ha'] = (net_city_blocks_gdf['frontage_m']/net_city_blocks_gdf['net_area_m2']).round(decimals=4)
+    net_city_blocks_gdf['network_density_m_ha'] = gross_city_blocks_gdf['network_density_m_ha'].round(decimals=4)
+
+    # net to gross area ratio
+    net_city_blocks_gdf['net:gross'] = (net_city_blocks_gdf.area/gross_city_blocks_gdf.area).round(decimals=2)
 
     # Change the order (the index) of the columns
-    columnsTitles = ['city_block_id', 'place', 'frontage_m', 'net_area_m2', 'PAR', 'gross_area_m2',
-                     'net:gross', 'inner_streets_m', 'outer_streets_m', 'network_length_m', 'network_density_m_ha', 'frontage_density_m_ha', 'geometry']
+    columnsTitles = ['city_block_id', 'place', 'net_area_m2', 'frontage_m', 'PAR', 'frontage_density_m_m2',
+                     'gross_area_m2', 'inner_streets_m', 'outer_streets_m', 'network_length_m', 'network_density_m_ha',
+                     'net:gross', 'geometry']
     net_city_blocks_gdf = net_city_blocks_gdf.reindex(columns=columnsTitles)
 
     return net_city_blocks_gdf
@@ -683,6 +689,7 @@ def join_places_building_data(places_proj, buildings_proj):
     places_proj['net_FSI'] = (places_proj['total_GEA_m2']/places_proj.area).round(decimals=3)
     places_proj['gross_GSI'] = (places_proj['footprint_m2']/places_proj['gross_area_m2']).round(decimals=3)
     places_proj['gross_FSI'] = (places_proj['total_GEA_m2']/places_proj['gross_area_m2']).round(decimals=3)
+    places_proj['avg_building:levels'] = (places_proj['total_GEA_m2']/places_proj['footprint_m2']).round(decimals=1)
 
     return places_proj
 
