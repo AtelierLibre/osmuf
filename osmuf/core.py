@@ -414,7 +414,7 @@ def measure_city_blocks(net_city_blocks_gdf, gross_city_blocks_gdf):
     net_city_blocks_gdf['net_area_m2'] = net_city_blocks_gdf.area.round(decimals=2)
     net_city_blocks_gdf['frontage_m'] = net_city_blocks_gdf.length.round(decimals=2)
     net_city_blocks_gdf['PAR'] = (net_city_blocks_gdf.length/net_city_blocks_gdf.area).round(decimals=4)
-    net_city_blocks_gdf['frontage_density_m_m2'] = (net_city_blocks_gdf['frontage_m']/net_city_blocks_gdf['net_area_m2']).round(decimals=4)
+    net_city_blocks_gdf['net_frontage_density_m_m2'] = (net_city_blocks_gdf['frontage_m']/net_city_blocks_gdf['net_area_m2']).round(decimals=4)
 
     # gross urban block measures
     net_city_blocks_gdf['gross_area_m2'] = gross_city_blocks_gdf.area.round(decimals=2)
@@ -422,12 +422,13 @@ def measure_city_blocks(net_city_blocks_gdf, gross_city_blocks_gdf):
     net_city_blocks_gdf['outer_streets_m'] = gross_city_blocks_gdf['outer_streets_m'].round(decimals=2)
     net_city_blocks_gdf['network_length_m'] = ((net_city_blocks_gdf['outer_streets_m']/2) + net_city_blocks_gdf['inner_streets_m']).round(decimals=2)
     net_city_blocks_gdf['network_density_m_ha'] = gross_city_blocks_gdf['network_density_m_ha'].round(decimals=4)
+    net_city_blocks_gdf['gross_frontage_density_m_m2'] = (net_city_blocks_gdf['frontage_m']/net_city_blocks_gdf['gross_area_m2']).round(decimals=4)
 
     # net to gross area ratio
     net_city_blocks_gdf['net:gross'] = (net_city_blocks_gdf.area/gross_city_blocks_gdf.area).round(decimals=2)
 
     # Change the order (the index) of the columns
-    columnsTitles = ['city_block_id', 'place', 'net_area_m2', 'frontage_m', 'PAR', 'frontage_density_m_m2',
+    columnsTitles = ['city_block_id', 'place', 'net_area_m2', 'frontage_m', 'PAR', 'net_frontage_density_m_m2', 'gross_frontage_density_m_m2',
                      'gross_area_m2', 'inner_streets_m', 'outer_streets_m', 'network_length_m', 'network_density_m_ha',
                      'net:gross', 'geometry']
     net_city_blocks_gdf = net_city_blocks_gdf.reindex(columns=columnsTitles)

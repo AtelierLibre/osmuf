@@ -317,7 +317,7 @@ def ax_map_network_density(ax_, study_area, city_blocks_gross, city_blocks, buil
         s = str(round((row['network_density_m_ha'])))
         ax_.text(row.geometry.centroid.x, row.geometry.centroid.y, s=s, ha='center', va='center', clip_on=True)
 
-    ax_.set_title('Network Density (m/ha)', fontsize=14, fontweight='semibold')
+    # unecessary? ax_.set_title('Network Density (m/ha)', fontsize=14, fontweight='semibold')
 
     ax_map_settings(ax_, study_area)
 
@@ -352,7 +352,7 @@ def ax_empty(ax_):
 
 def ax_block_ntg_to_size(ax_, city_blocks):
     # ax block net_to_gross against size
-    ax_.scatter(x=city_blocks.area/10_000, y=city_blocks['net:gross'], color='steelblue')
+    seaborn.regplot(ax=ax_, x=city_blocks.area/10_000, y=city_blocks['net:gross'], color='steelblue', logx=True)
     add_titlebox(ax_, 'Urban Blocks, Net:Gross')
     ax_.set_xlabel("Net area (ha)")
     ax_.set_ylabel("Net:gross ratio")
@@ -401,7 +401,7 @@ def ax_block_perimeter_to_area(ax_, city_blocks):
 
 def ax_net_GSI_to_net_area(ax_, city_blocks):
     # scatterplot -
-    ax_.scatter(x=(city_blocks['net_area_m2']/10_000), y=city_blocks['net_GSI'], color='Orange')
+    seaborn.regplot(ax=ax_, x=(city_blocks['net_area_m2']/10_000), y=city_blocks['net_GSI'], color='Orange', logx=True)
     add_titlebox(ax_, 'GSI' + ' by Net Urban Block Area')
     ax_.set_xlabel("Net Urban Block Area (ha)")
     ax_.set_ylabel("Net GSI")
@@ -411,12 +411,12 @@ def ax_net_GSI_to_net_area(ax_, city_blocks):
 
 def ax_net_GSI_to_frontage_density(ax_, city_blocks):
     # scatterplot -
-    ax_.scatter(x=(city_blocks['frontage_density_m_m2']), y=city_blocks['net_GSI'], color='Orange')
-    add_titlebox(ax_, 'GSI' + ' by Frontage Density')
-    ax_.set_xlabel("Frontage Density (m/ha)")
+    seaborn.regplot(ax=ax_, x=(city_blocks['net_frontage_density_m_m2']*10_000), y=city_blocks['net_GSI'], color='Orange')
+    add_titlebox(ax_, 'Net GSI' + ' by Frontage Density')
+    ax_.set_xlabel("Net Frontage Density (m/ha)")
     ax_.set_ylabel("Net GSI")
     ax_.set_ylim([0,1])
-    ax_.set_xlim([0,0.15])
+    ax_.set_xlim([0,1_500])
     ax_graph_settings(ax_)
 
 def ax_building_GEA_to_frontage(ax_, city_blocks):
@@ -488,10 +488,10 @@ def ax_building_height_distribution_by_area(ax_, buildings):
 
 def ax_net_FSI_to_net_area(ax_, city_blocks):
     # scatterplot -
-    ax_.scatter(x=(city_blocks['net_area_m2']/10_000), y=city_blocks['net_FSI'], color='Purple')
-    add_titlebox(ax_, 'FSI by Net Urban Block Area')
+    seaborn.regplot(ax=ax_, x=(city_blocks['net_area_m2']/10_000), y=city_blocks['net_FSI'], color='Purple', logx=True)
+    add_titlebox(ax_, 'Net FSI by Net Urban Block Area')
     ax_.set_xlabel("Urban Block, Net Area (ha)")
-    ax_.set_ylabel("Floor Area Ratio (FSI)")
+    ax_.set_ylabel("Net Floor Area Ratio (FSI)")
     ax_.set_ylim([0,6])
     ax_.set_xlim([0,8])
 
@@ -499,10 +499,10 @@ def ax_net_FSI_to_net_area(ax_, city_blocks):
 
 def ax_net_FSI_to_avg_building_height(ax_, city_blocks):
     # scatterplot -
-    ax_.scatter(x=(city_blocks['avg_building:levels']), y=city_blocks['net_FSI'], color='yellow')
-    add_titlebox(ax_, 'FSI, Average Building Height')
+    seaborn.regplot(ax=ax_, x=(city_blocks['avg_building:levels']), y=city_blocks['net_FSI'], color='yellow', robust=True)
+    add_titlebox(ax_, 'Net FSI, Average Building Height')
     ax_.set_xlabel("Urban Block, Average Building Height (Storeys)")
-    ax_.set_ylabel("Floor Area Ratio (FSI)")
+    ax_.set_ylabel("Net Floor Area Ratio (FSI)")
     ax_.set_ylim([0,6])
     ax_.set_xlim([0,25])
 
@@ -521,12 +521,22 @@ def ax_net_FSI_to_frontage(ax_, city_blocks):
 
 def ax_net_FSI_to_frontage_density(ax_, city_blocks):
     # scatterplot -
-    ax_.scatter(x=(city_blocks['frontage_density_m_m2']), y=city_blocks['net_FSI'], color='Purple')
-    add_titlebox(ax_, 'FSI by Frontage Density')
-    ax_.set_xlabel("Frontage Density (m/ha)")
-    ax_.set_ylabel("Floor Area Ratio (FSI)")
+    seaborn.regplot(ax=ax_, x=(city_blocks['net_frontage_density_m_m2']*10_000), y=city_blocks['net_FSI'], color='Purple', robust=True)
+    add_titlebox(ax_, 'Net FSI by Frontage Density')
+    ax_.set_xlabel("Net Frontage Density (m/ha)")
+    ax_.set_ylabel("Net Floor Area Ratio (FSI)")
     ax_.set_ylim([0,6])
-    ax_.set_xlim([0,0.25])
+    ax_.set_xlim([0,2_500])
+    ax_graph_settings(ax_)
+
+def ax_gross_FSI_to_gross_frontage_density(ax_, city_blocks):
+    # scatterplot -
+    seaborn.regplot(ax=ax_, x=(city_blocks['gross_frontage_density_m_m2']*10_000), y=city_blocks['gross_FSI'], color='green')
+    add_titlebox(ax_, 'Gross FSI by Frontage Density')
+    ax_.set_xlabel("Gross Frontage Density (m/ha)")
+    ax_.set_ylabel("Gross Floor Area Ratio (FSI)")
+    ax_.set_ylim([0,4])
+    ax_.set_xlim([0,1000])
     ax_graph_settings(ax_)
 
 def ax_gross_FSI_to_gross_area(ax_, city_blocks):
@@ -539,7 +549,7 @@ def ax_gross_FSI_to_gross_area(ax_, city_blocks):
     city_blocks: gdf containing data
     '''
     # scatterplot -
-    ax_.scatter(x=(city_blocks['gross_area_m2']/10_000), y=city_blocks['gross_FSI'], color='Purple')
+    seaborn.regplot(ax=ax_, x=(city_blocks['gross_area_m2']/10_000), y=city_blocks['gross_FSI'], color='Purple', lowess=True)
     add_titlebox(ax_, 'Gross FSI' + ', Gross Area')
     ax_.set_xlabel("Gross Area (ha)")
     ax_.set_ylabel("Gross FSI")
@@ -558,10 +568,10 @@ def ax_gross_FSI_to_network_density(ax_, city_blocks):
     city_blocks: gdf containing data
     '''
     # scatterplot -
-    ax_.scatter(x=(city_blocks['network_density_m_ha']), y=city_blocks['gross_FSI'], color='Green')
+    seaborn.regplot(ax=ax_, x=(city_blocks['network_density_m_ha']), y=city_blocks['gross_FSI'], color='Green')
     add_titlebox(ax_, 'Gross FSI' + ', Network Density')
     ax_.set_xlabel("Network Density (m/ha)")
-    ax_.set_ylabel("Gross FSI")
+    ax_.set_ylabel("Gross Floor Area Ratio (FSI)")
     ax_.set_ylim([0,4])
     ax_.set_xlim([0,500])
 
@@ -569,7 +579,7 @@ def ax_gross_FSI_to_network_density(ax_, city_blocks):
 
 def ax_FSI_to_network_density(ax_, city_blocks):
     # scatterplot -
-    ax_.scatter(x=(city_blocks['network_density_m_ha']), y=city_blocks['gross_FSI'], color='Purple')
+    seaborn.regplot(ax=ax_, x=(city_blocks['network_density_m_ha']), y=city_blocks['gross_FSI'], color='Purple')
     add_titlebox(ax_, 'Gross FSI' + '/ Network Density')
     ax_.set_xlabel("Network Density (m/ha)")
     ax_.set_ylabel("Gross FSI")
@@ -580,7 +590,7 @@ def ax_FSI_to_network_density(ax_, city_blocks):
 
 def ax_network_density_to_gross_area(ax_, city_blocks_gross):
     # scatterplot -
-    ax_.scatter(x=(city_blocks_gross['gross_area_ha']), y=city_blocks_gross['network_density_m_ha'], color='Green')
+    seaborn.regplot(ax=ax_, x=(city_blocks_gross['gross_area_ha']), y=city_blocks_gross['network_density_m_ha'], color='Green', logx=True)
     add_titlebox(ax_, 'Network Density, Gross Area')
     ax_.set_xlabel("Gross Area (ha)")
     ax_.set_ylabel("Network Density (m/ha)")

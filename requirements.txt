@@ -1,1 +1,2 @@
 osmnx>=0.9
+seaborn
