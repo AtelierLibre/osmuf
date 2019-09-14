@@ -2,6 +2,9 @@ from setuptools import setup
 
 setup(name='osmuf',
       version='0.1',
+      install_requires=[
+            "seaborn",
+      ],
       description='Urban Form analysis from OpenStreetMap',
       url='http://github.com/atelierlibre/osmuf',
       author='AtelierLibre',
