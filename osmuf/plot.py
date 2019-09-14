@@ -67,11 +67,11 @@ def label_geom(ax, gdf, column):
 #####################
 
 # Layout - 3 plots - map, top and bottom
-def layout_3_plots():
+def layout_3_plots(dpi=200):
 
     gridsize = (2, 3)
     # was (18,10)
-    fig = plt.figure(figsize=(18, 10), facecolor='gainsboro', dpi=200)
+    fig = plt.figure(figsize=(18, 10), facecolor='gainsboro', dpi=dpi)
 
     ax_top = plt.subplot2grid(gridsize, (0, 0))
     ax_bottom = plt.subplot2grid(gridsize, (1, 0))
