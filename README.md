@@ -18,3 +18,89 @@ Urban Form and Density are recognised as having an impact on quality of life in 
 ### An evidence base
 
 This project aims to establish a method for quantifying existing built environments based on data from, or added to, OpenStreetMap and using an open source Python library based primarily on osmnx, geopandas and matplotlib. Ultimately it aims to put some relatively simple measures against a variety of urban environments to contribute to an informed discussion about how best to design sustainable towns and cities.
+
+## Installation
+
+Development of OSMuf has been carried out in a Python 3 Miniconda environment on Ubuntu and the installation instructions below reflect this. 
+
+### Creation of a Miniconda environment that uses conda-forge
+
+Set up of Miniconda followed [Ted Petrou's guidance](https://medium.com/dunder-data/anaconda-is-bloated-set-up-a-lean-robust-data-science-environment-with-miniconda-and-conda-forge-b48e1ac11646).
+
+Create and activate a new empty Miniconda environment
+
+`conda create -n osmuf_test`
+`conda activate osmuf_test`
+
+add the conda-forge channel to this environment and set to strict priority (i.e. always prefer packages from conda-forge)
+
+`conda config --env --add channels conda-forge`
+`conda config --env --set channel_priority strict`
+
+check the channels and priority with
+
+`conda config --show channels`
+`conda config --show channel_priority`
+
+### Install OSMnx
+
+OSMnx can then be installed with
+
+`conda install osmnx`
+
+### Install Jupyter Lab
+
+Jupyter has to be installed into the environment otherwise it may not find osmuf
+
+`conda install jupyterlab`
+
+### Install seaborn
+
+OSMuf should install seaborn itself, otherwise install it with
+
+`conda install seaborn`
+
+### Install OSMuf
+
+Either download and expand the zip of OSMuf from its [github repository](https://github.com/AtelierLibre/osmuf) or clone it using
+
+`git clone https://github.com/AtelierLibre/osmuf.git`
+
+Change directory into the downloaded osmuf folder
+
+`cd osmuf/`
+
+Install OSMuf with pip
+
+`pip install .`
+
+or
+
+`python setup.py install`
+
+### Start Jupyter Lab
+
+Start jupyter lab (jupyter notebook should work as well)
+
+`jupyter lab`
+
+Check that jupyter is running using the kernel from the new environment by running the following code in a new cell of a notebook
+
+`import sys`
+`sys.executable`
+
+This should list the python kernel as running from something like
+
+`../anaconda3/envs/osmuf_test/bin/python`
+
+If this isn't the case refer to the Ted Petrou link above.
+
+### Running the demonstration notebook
+
+Double-click the OSMuf_v0.1.ipynb notebook to start it.
+
+Run each of the cells in turn to generate the visualisations for the four sample areas.
+
+To change the sample area, change the place name in cell [4] to match one of the other names in the dictionary in cell [1].
+
+To save the visualisations (and avoid the error message) create a folder named `local_images` at the same level as the `notebooks` folder.
