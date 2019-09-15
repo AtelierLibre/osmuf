@@ -482,10 +482,10 @@ def measure_network_density(streets_for_networkd_prj, gross_city_blocks_prj):
     gross_city_blocks_prj.fillna(0, axis=1, inplace=True)
 
     gross_city_blocks_prj['outer_streets_m'] = gross_city_blocks_prj.length.round(decimals=2)
-    gross_city_blocks_prj['gross_area_ha'] = (gross_city_blocks_prj.area/10_000).round(decimals=4)
+    gross_city_blocks_prj['gross_area_ha'] = (gross_city_blocks_prj.area/10000).round(decimals=4)
     gross_city_blocks_prj['network_density_m_ha'] = (((gross_city_blocks_prj['outer_streets_m']/2)
                                                       +(gross_city_blocks_prj['inner_streets_m']))
-                                                     /((gross_city_blocks_prj.area/10_000))).round(decimals=2)
+                                                     /((gross_city_blocks_prj.area/10000))).round(decimals=2)
 
     return gross_city_blocks_prj
 

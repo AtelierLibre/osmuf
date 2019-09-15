@@ -137,7 +137,7 @@ def ax_map_block_size(ax_, study_area, city_blocks_gross, city_blocks):
     for idx, row in city_blocks.iterrows():
         rp = row.geometry.representative_point()
         s1 = str(round((row['net:gross']),2))
-        s2 = 'N' + str(round((row['net_area_m2']/10_000),2)) + ' \nG' + str(round((row['gross_area_m2']/10_000),2))
+        s2 = 'N' + str(round((row['net_area_m2']/10000),2)) + ' \nG' + str(round((row['gross_area_m2']/10000),2))
         ax_.text(rp.x, rp.y, s=s1, ha='center', va='bottom',fontsize=10, fontweight='semibold', clip_on=True)
         ax_.text(rp.x, rp.y, s=s2, ha='center', va='top',fontsize=9, clip_on=True)
 
@@ -352,7 +352,7 @@ def ax_empty(ax_):
 
 def ax_block_ntg_to_size(ax_, city_blocks):
     # ax block net_to_gross against size
-    seaborn.regplot(ax=ax_, x=city_blocks.area/10_000, y=city_blocks['net:gross'], color='steelblue', logx=True)
+    seaborn.regplot(ax=ax_, x=city_blocks.area/10000, y=city_blocks['net:gross'], color='steelblue', logx=True)
     add_titlebox(ax_, 'Urban Blocks, Net:Gross')
     ax_.set_xlabel("Net area (ha)")
     ax_.set_ylabel("Net:gross ratio")
@@ -363,8 +363,8 @@ def ax_block_ntg_to_size(ax_, city_blocks):
 
 def ax_block_area_distribution(ax_, city_blocks):
     # histogram - form factor, range=(0,1),
-    # ax_.hist((city_blocks['net_area_m2']/10_000), bins='auto', color='steelblue', density=True)
-    (city_blocks['net_area_m2']/10_000).hist(ax=ax_, bins=[0,0.5, 1, 1.5, 2, 2.5, 3, 3.5, 4, 4.5 ,5, 5.5 ,6 , 6.5, 7, 7.5 ,8, 8.5, 9, 9.5, 10, 10.5], rwidth=0.9)
+    # ax_.hist((city_blocks['net_area_m2']/10000), bins='auto', color='steelblue', density=True)
+    (city_blocks['net_area_m2']/10000).hist(ax=ax_, bins=[0,0.5, 1, 1.5, 2, 2.5, 3, 3.5, 4, 4.5 ,5, 5.5 ,6 , 6.5, 7, 7.5 ,8, 8.5, 9, 9.5, 10, 10.5], rwidth=0.9)
     add_titlebox(ax_, 'Urban Blocks, Area Distribution')
     ax_.set_xlabel("Net Area (ha)")
     ax_.set_ylabel("Count")
@@ -375,7 +375,7 @@ def ax_block_area_distribution(ax_, city_blocks):
 
 def ax_form_factor_to_area(ax_, city_blocks_form_factor):
     # form factor scatterplot
-    ax_.scatter(x=(city_blocks_form_factor['poly_area_m2']/10_000), y=city_blocks_form_factor['regularity'], color='Red')
+    ax_.scatter(x=(city_blocks_form_factor['poly_area_m2']/10000), y=city_blocks_form_factor['regularity'], color='Red')
     add_titlebox(ax_, "Form factor / Area")
     ax_.set_xlabel("Area (ha)")
     ax_.set_ylabel("Form factor (φ)")
@@ -386,7 +386,7 @@ def ax_form_factor_to_area(ax_, city_blocks_form_factor):
 
 def ax_block_perimeter_to_area(ax_, city_blocks):
     # ax block area:perimeter ratio
-    ax_.scatter(x=(city_blocks['net_area_m2']/10_000), y=city_blocks['frontage_m'], color='Red')
+    ax_.scatter(x=(city_blocks['net_area_m2']/10000), y=city_blocks['frontage_m'], color='Red')
     add_titlebox(ax_, 'Perimeter / Area')
     ax_.set_xlabel("Net area (ha)")
     ax_.set_ylabel("Perimeter (m)")
@@ -401,7 +401,7 @@ def ax_block_perimeter_to_area(ax_, city_blocks):
 
 def ax_net_GSI_to_net_area(ax_, city_blocks):
     # scatterplot -
-    seaborn.regplot(ax=ax_, x=(city_blocks['net_area_m2']/10_000), y=city_blocks['net_GSI'], color='Orange', logx=True)
+    seaborn.regplot(ax=ax_, x=(city_blocks['net_area_m2']/10000), y=city_blocks['net_GSI'], color='Orange', logx=True)
     add_titlebox(ax_, 'GSI' + ' by Net Urban Block Area')
     ax_.set_xlabel("Net Urban Block Area (ha)")
     ax_.set_ylabel("Net GSI")
@@ -411,12 +411,12 @@ def ax_net_GSI_to_net_area(ax_, city_blocks):
 
 def ax_net_GSI_to_frontage_density(ax_, city_blocks):
     # scatterplot -
-    seaborn.regplot(ax=ax_, x=(city_blocks['net_frontage_density_m_m2']*10_000), y=city_blocks['net_GSI'], color='Orange')
+    seaborn.regplot(ax=ax_, x=(city_blocks['net_frontage_density_m_m2']*10000), y=city_blocks['net_GSI'], color='Orange')
     add_titlebox(ax_, 'Net GSI' + ' by Frontage Density')
     ax_.set_xlabel("Net Frontage Density (m/ha)")
     ax_.set_ylabel("Net GSI")
     ax_.set_ylim([0,1])
-    ax_.set_xlim([0,1_500])
+    ax_.set_xlim([0,1500])
     ax_graph_settings(ax_)
 
 def ax_building_GEA_to_frontage(ax_, city_blocks):
@@ -425,29 +425,29 @@ def ax_building_GEA_to_frontage(ax_, city_blocks):
     add_titlebox(ax_, 'Total Building GEA, Frontage')
     ax_.set_xlabel("Frontage (m)")
     ax_.set_ylabel("Total Building GEA (m2)")
-    ax_.set_ylim([0,25_000])
+    ax_.set_ylim([0,25000])
     ax_.set_xlim([0, 600])
 
     ax_graph_settings(ax_)
 
 def ax_building_GEA_to_net_area(ax_, city_blocks):
     # scatterplot -
-    ax_.scatter(x=(city_blocks['net_area_m2']/10_000), y=city_blocks['total_GEA_m2'], color='Orange')
+    ax_.scatter(x=(city_blocks['net_area_m2']/10000), y=city_blocks['total_GEA_m2'], color='Orange')
     add_titlebox(ax_, 'Total Building GEA, Net Block Area')
     ax_.set_xlabel("Net Block Area (ha)")
     ax_.set_ylabel("Total Building GEA (m2)")
-    ax_.set_ylim([0,25_000])
+    ax_.set_ylim([0,25000])
     ax_.set_xlim([0, 1.5])
 
     ax_graph_settings(ax_)
 
 def ax_building_footprint_to_net_area(ax_, city_blocks):
     # scatterplot -
-    ax_.scatter(x=(city_blocks['net_area_m2']/10_000), y=city_blocks['footprint_m2'], color='Orange')
+    ax_.scatter(x=(city_blocks['net_area_m2']/10000), y=city_blocks['footprint_m2'], color='Orange')
     add_titlebox(ax_, 'Total Building Footprint by Net Urban Block Area')
     ax_.set_xlabel("Net Urban Block Area (ha)")
     ax_.set_ylabel("Total Building Footprint (m2)")
-    ax_.set_ylim([0,6_000])
+    ax_.set_ylim([0,6000])
     ax_.set_xlim([0, 1.5])
 
     ax_graph_settings(ax_)
@@ -488,7 +488,7 @@ def ax_building_height_distribution_by_area(ax_, buildings):
 
 def ax_net_FSI_to_net_area(ax_, city_blocks):
     # scatterplot -
-    seaborn.regplot(ax=ax_, x=(city_blocks['net_area_m2']/10_000), y=city_blocks['net_FSI'], color='Purple', logx=True)
+    seaborn.regplot(ax=ax_, x=(city_blocks['net_area_m2']/10000), y=city_blocks['net_FSI'], color='Purple', logx=True)
     add_titlebox(ax_, 'Net FSI by Net Urban Block Area')
     ax_.set_xlabel("Urban Block, Net Area (ha)")
     ax_.set_ylabel("Net Floor Area Ratio (FSI)")
@@ -521,17 +521,17 @@ def ax_net_FSI_to_frontage(ax_, city_blocks):
 
 def ax_net_FSI_to_frontage_density(ax_, city_blocks):
     # scatterplot -
-    seaborn.regplot(ax=ax_, x=(city_blocks['net_frontage_density_m_m2']*10_000), y=city_blocks['net_FSI'], color='Purple', robust=True)
+    seaborn.regplot(ax=ax_, x=(city_blocks['net_frontage_density_m_m2']*10000), y=city_blocks['net_FSI'], color='Purple', robust=True)
     add_titlebox(ax_, 'Net FSI by Frontage Density')
     ax_.set_xlabel("Net Frontage Density (m/ha)")
     ax_.set_ylabel("Net Floor Area Ratio (FSI)")
     ax_.set_ylim([0,6])
-    ax_.set_xlim([0,2_500])
+    ax_.set_xlim([0,2500])
     ax_graph_settings(ax_)
 
 def ax_gross_FSI_to_gross_frontage_density(ax_, city_blocks):
     # scatterplot -
-    seaborn.regplot(ax=ax_, x=(city_blocks['gross_frontage_density_m_m2']*10_000), y=city_blocks['gross_FSI'], color='green')
+    seaborn.regplot(ax=ax_, x=(city_blocks['gross_frontage_density_m_m2']*10000), y=city_blocks['gross_FSI'], color='green')
     add_titlebox(ax_, 'Gross FSI by Frontage Density')
     ax_.set_xlabel("Gross Frontage Density (m/ha)")
     ax_.set_ylabel("Gross Floor Area Ratio (FSI)")
@@ -549,7 +549,7 @@ def ax_gross_FSI_to_gross_area(ax_, city_blocks):
     city_blocks: gdf containing data
     '''
     # scatterplot -
-    seaborn.regplot(ax=ax_, x=(city_blocks['gross_area_m2']/10_000), y=city_blocks['gross_FSI'], color='Purple', lowess=True)
+    seaborn.regplot(ax=ax_, x=(city_blocks['gross_area_m2']/10000), y=city_blocks['gross_FSI'], color='Purple', lowess=True)
     add_titlebox(ax_, 'Gross FSI' + ', Gross Area')
     ax_.set_xlabel("Gross Area (ha)")
     ax_.set_ylabel("Gross FSI")
