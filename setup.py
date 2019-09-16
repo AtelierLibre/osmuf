@@ -1,7 +1,7 @@
 from setuptools import setup
 
 setup(name='osmuf',
-      version='0.1',
+      version='0.2',
       install_requires=[
             "seaborn",
       ],
