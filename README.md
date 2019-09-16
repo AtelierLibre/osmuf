@@ -1,9 +1,12 @@
 # OSMuf - OpenStreetMap for Urban Form
+
+*updated 15 September 2019*
+
 OSMuf is a project to explore the use of Python and OpenStreetMap for quantifying urban form, specifically the size and shape of urban/city blocks and built density.
 
 It is in a large part inspired by the work of Geoff Boeing on OSMnx, Berghauser Pont and Haupt on the 'Spacemate', Barthélemy and Louf on Measuring Urban Form, and Philip Steadman on 'integrating 'Spacemate' with the work of Martin and March'.
 
-### Urban blocks - net or gross?
+### Urban blocks - net or gross
 
 Large scale studies of urban form often approximate city blocks by generating polygons from the centrelines of the transport network. The approach of OSMuf is to instead work with urban blocks as objects in themselves with their own spatial definition. Loosely this could be categorised as the difference between 'gross urban blocks' defined by transport network centrelines and 'net urban blocks' defined by the line separating privately owned land or land dedicated to public amenity from land dedicated to the transport network.
 
@@ -21,7 +24,8 @@ This project aims to establish a method for quantifying existing built environme
 
 ## Installation
 
-Development of OSMuf has been carried out in a Python 3 Miniconda environment on Ubuntu and the installation instructions below reflect this. 
+Development of OSMuf has been carried out in a Python 3.7 Miniconda environment on Ubuntu and the installation instructions below reflect this.
+It has also been installed into a Miniconda environment on Windows. On Windows problems were encountered with missing dll files. This was resolved by installing certain libraries, including gdal, from pip. See [here](https://geoffboeing.com/2014/09/using-geopandas-windows/) for further instructions. It has also been installed and run on a Raspberry Pi - please see the separate Raspberry_Pi_README.
 
 ### Creation of a Miniconda environment that uses conda-forge
 
@@ -29,18 +33,24 @@ Set up of Miniconda followed [Ted Petrou's guidance](https://medium.com/dunder-d
 
 Create and activate a new empty Miniconda environment
 
-`conda create -n osmuf_test`
-`conda activate osmuf_test`
+```bash
+conda create -n osmuf_test
+conda activate osmuf_test
+```
 
 add the conda-forge channel to this environment and set to strict priority (i.e. always prefer packages from conda-forge)
 
-`conda config --env --add channels conda-forge`
-`conda config --env --set channel_priority strict`
+```bash
+conda config --env --add channels conda-forge
+conda config --env --set channel_priority strict
+```
 
 check the channels and priority with
 
-`conda config --show channels`
-`conda config --show channel_priority`
+```bash
+conda config --show channels
+conda config --show channel_priority
+```
 
 ### Install OSMnx
 
@@ -78,6 +88,10 @@ or
 
 `python setup.py install`
 
+create a folder for the final images
+
+`mkdir local_images`
+
 ### Start Jupyter Lab
 
 Start jupyter lab (jupyter notebook should work as well)
@@ -86,8 +100,10 @@ Start jupyter lab (jupyter notebook should work as well)
 
 Check that jupyter is running using the kernel from the new environment by running the following code in a new cell of a notebook
 
-`import sys`
-`sys.executable`
+```python
+import sys
+sys.executable
+```
 
 This should list the python kernel as running from something like
 
@@ -97,10 +113,8 @@ If this isn't the case refer to the Ted Petrou link above.
 
 ### Running the demonstration notebook
 
-Double-click the OSMuf_v0.1.ipynb notebook to start it.
+Click on the OSMuf_v0.1.ipynb notebook to start it.
 
 Run each of the cells in turn to generate the visualisations for the four sample areas.
 
 To change the sample area, change the place name in cell [4] to match one of the other names in the dictionary in cell [1].
-
-To save the visualisations (and avoid the error message) create a folder named `local_images` at the same level as the `notebooks` folder.
