@@ -1,8 +1,87 @@
 # Installation on RaspberryPi
 
-*updated 15 September 2019*
-
 OSMuf v0.1 has been successfully installed and run on a RaspberryPi 3 Model B.
+
+## Raspbian Buster
+
+*updated 16 September 2019*
+
+On a new, updated installation of *Raspbian Buster with desktop* (July 2019) with Python 3.7.3. The intention was to install everything from pip as far as possible.
+
+```
+$ sudo apt install ...
+
+libzmq-dev
+libgdal-dev
+libxslt-dev
+libspatialindex-dev
+libatlas-base-dev
+xclip
+cython
+python3-scipy
+python3-distlib
+```
+
+Some python libraries could not be installed from pip and so were installed from apt:
+
+```
+$ sudo apt install ...
+
+python3-dateutil
+python3-gflags
+python3-googleapi
+python3-mpltoolkits.basemap
+```
+
+The remainder were installed with pip.
+
+```
+$ sudo pip3 install ...
+
+matplotlib
+h5py
+numexpr
+tz
+bs4
+openpyxl
+tables
+xlrd
+sqlalchemy
+xlsxwriter
+boto
+httplib2
+zmq
+xlwt
+bottleneck
+rtree
+sklearn
+pandas
+seaborn
+statsmodels
+geopy
+shapely
+scrapy
+jupyter
+geopandas
+osmnx
+```
+
+To install OSMuf itself:
+
+- Download the osmuf zip from [Github](https://github.com/AtelierLibre/osmuf) using the `Clone or download` button.
+- Expand it into the folder that you want
+- Change directory into osmuf-master
+- Run `sudo python3 setup.py install`
+- Create a folder to hold the generated images `mkdir local_images`
+
+To run the OSMuf proof-of-concept
+
+- Run `jupyter notebook` to open jupyter notebook in a web browser.
+- In jupyter open the `notebooks` folder and open the notebook `OSMuf_v0.1` then run each cell in turn.
+
+## Raspbian Stretch
+
+*updated 15 September 2019*
 
 It was installed on 'Raspbian Stretch with Desktop' (v9.11) and the included Python 3.5.3.
 
