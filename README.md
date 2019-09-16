@@ -25,7 +25,7 @@ This project aims to establish a method for quantifying existing built environme
 ## Installation
 
 Development of OSMuf has been carried out in a Python 3.7 Miniconda environment on Ubuntu and the installation instructions below reflect this.
-It has also been installed into a Miniconda environment on Windows. On Windows problems were encountered with missing dll files. This was resolved by installing certain libraries, including gdal, from pip. See [here](https://geoffboeing.com/2014/09/using-geopandas-windows/) for further instructions. It has also been installed and run on a Raspberry Pi - please see the separate Raspberry_Pi_README.
+It has also been installed into a Miniconda environment on Windows. On Windows problems were encountered with missing dll files. This was resolved by installing certain libraries, including gdal, from pip. See [here](https://geoffboeing.com/2014/09/using-geopandas-windows/) for further instructions. It has also been installed and run on a Raspberry Pi - please see the separate README_RaspberryPi.md.
 
 ### Creation of a Miniconda environment that uses conda-forge
 
