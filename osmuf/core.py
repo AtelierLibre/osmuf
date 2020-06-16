@@ -287,7 +287,10 @@ def gen_gross_city_blocks(street_graph, net_city_blocks=None):
     # reindex the columns
     gross_city_blocks = gross_city_blocks.reindex(columns=['city_block_id', 'place', 'geometry'])
     # delete the index name
-    del gross_city_blocks.index.name
+    try:
+        del gross_city_blocks.index.name
+    except AttributeError:
+        pass
 
     return gross_city_blocks
 
@@ -681,7 +684,7 @@ def join_places_building_data(places_proj, buildings_proj):
     building_areas_by_place=buildings_proj[['footprint_m2','total_GEA_m2']].groupby(buildings_proj['city_block_id']).sum()
     # if there are buildings not associated with a city_block they aggregate under 0
     # if this happens remove them from the dataframe
-    if building_areas_by_place.index.contains(0):
+    if 0 in building_areas_by_place.index:
         building_areas_by_place = building_areas_by_place.drop([0])
 
     places_proj = places_proj.merge(building_areas_by_place, on = 'city_block_id')
