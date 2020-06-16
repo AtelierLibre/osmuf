@@ -39,7 +39,7 @@ def study_area_from_point(point, distance):
     GeoDataFrame
     """
     # use osmnx to define the bounding box
-    bbox = ox.bbox_from_point(point, distance)
+    bbox = ox.utils_geo.bbox_from_point(point, distance)
 
     # split the tuple
     n, s, e, w = bbox
@@ -72,7 +72,7 @@ def projected_study_area_from_point(point, distance):
     GeoDataFrame
     """
     # use osmnx to define the bounding box, always return the crs
-    bbox = ox.bbox_from_point(point, distance, project_utm=True, return_crs=True)
+    bbox = ox.utils_geo.bbox_from_point(point, distance, project_utm=True, return_crs=True)
 
     # split the tuple
     n, s, e, w, crs_code = bbox
@@ -352,7 +352,7 @@ def project_measure_gdf(gdf):
     GeoDataFrame
     """
     # use osmnx to project gdf to UTM
-    gdf_proj = ox.project_gdf(gdf)
+    gdf_proj = ox.projection.project_gdf(gdf)
     # write perimeter length into column
     gdf_proj['perimeter_m'] = gdf_proj.length
     # write area into column
