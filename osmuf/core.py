@@ -9,6 +9,7 @@ import numpy as np
 import pandas as pd
 import geopandas as gpd
 import osmnx as ox
+from osmnx.utils_geo import bbox_from_point
 
 from shapely.geometry import Point, LineString, Polygon, MultiPolygon
 from shapely.ops import polygonize
@@ -39,7 +40,7 @@ def study_area_from_point(point, distance):
     GeoDataFrame
     """
     # use osmnx to define the bounding box
-    bbox = ox.utils_geo.bbox_from_point(point, distance)
+    bbox = bbox_from_point(point, distance)
 
     # split the tuple
     n, s, e, w = bbox
@@ -72,7 +73,7 @@ def projected_study_area_from_point(point, distance):
     GeoDataFrame
     """
     # use osmnx to define the bounding box, always return the crs
-    bbox = ox.utils_geo.bbox_from_point(point, distance, project_utm=True, return_crs=True)
+    bbox = bbox_from_point(point, distance, project_utm=True, return_crs=True)
 
     # split the tuple
     n, s, e, w, crs_code = bbox
@@ -481,8 +482,9 @@ def measure_network_density(streets_for_networkd_prj, gross_city_blocks_prj):
     # merge the total inner street length onto the gross blocks
     gross_city_blocks_prj = gross_city_blocks_prj.merge(inner_streets_agg_by_block, how='outer', left_index=True, right_index=True)
 
-    # Fill NaN with zeroes
-    gross_city_blocks_prj.fillna(0, axis=1, inplace=True)
+    # Fill NaN with zeroes - Why is this? For those without inner streets?
+    print(gross_city_blocks_prj.columns)
+    gross_city_blocks_prj.fillna({'inner_streets_m':0, 'outer_streets_m':0, 'gross_area_ha':0}, inplace=True)
 
     gross_city_blocks_prj['outer_streets_m'] = gross_city_blocks_prj.length.round(decimals=2)
     gross_city_blocks_prj['gross_area_ha'] = (gross_city_blocks_prj.area/10000).round(decimals=4)
