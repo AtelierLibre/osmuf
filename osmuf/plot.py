@@ -26,9 +26,9 @@ from shapely import wkt
 from descartes import PolygonPatch
 
 from osmnx import settings
-from osmnx import save_and_show
+# from osmnx import save_and_show
 from osmnx.utils import log
-from osmnx.utils import make_str
+# from osmnx.utils import make_str
 
 import matplotlib.pyplot as plt
 import matplotlib.cm as cm

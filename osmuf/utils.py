@@ -150,9 +150,9 @@ def graph_to_polygons(G, node_geometry=True, fill_edge_geometry=True):
         gdf_polygons
     """
 
-    # create a list to hold our edges, then loop through each edge in the
-    # graph
+    # create a list to hold edges
     edges = []
+    # loop through the edges in the graph
     for u, v, key, data in G.edges(keys=True, data=True):
 
         # for each edge, add key and all attributes in data dict to the
@@ -179,7 +179,7 @@ def graph_to_polygons(G, node_geometry=True, fill_edge_geometry=True):
     for edge in edges:
         edge_geometry.append(edge['geometry'])
 
-    # create a list to hold our polygons
+    # create a list to hold polygons
     polygons = []
 
     polygons = list(polygonize(edge_geometry))
@@ -201,6 +201,6 @@ def graph_to_polygons(G, node_geometry=True, fill_edge_geometry=True):
 
     # Set the crs
     gdf_polygons.crs = G.graph['crs']
-    gdf_polygons.gdf_name = '{}_polygons'.format(G.graph['name'])
+    gdf_polygons.gdf_name = '{}_polygons'.format('name') #G.graph['name'])
 
     return gdf_polygons
