@@ -88,7 +88,7 @@ def gdf_convex_hull(gdf):
 
     # project gdf back to geographic coordinates as footprints_from_polygon
     # requires it
-    gdf_temp = ox.project_gdf(gdf, to_latlong=True)
+    gdf_temp = ox.projection.project_gdf(gdf, to_latlong=True)
     # determine the boundary polygon to fetch buildings within
     # buffer originally 0.000225, buffer actually needs to go whole block away
     # to get complete highways therefor trying 0.001
