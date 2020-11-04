@@ -5,6 +5,7 @@
 # Web: https://github.com/atelierlibre/osmuf
 ################################################################################
 
+import math
 import numpy as np
 import pandas as pd
 import geopandas as gpd
@@ -17,6 +18,17 @@ from shapely.geometry import LineString
 from shapely.geometry import Polygon, MultiPolygon
 
 from shapely.ops import polygonize
+
+def determine_utm_zone(gdf):
+    
+    # calculate longitude of centroid of union of all geometries in gdf
+    avg_lng = gdf.geometry.unary_union.centroid.x
+
+    # calculate UTM zone from avg longitude to define CRS to project to
+    utm_zone = int(math.floor((avg_lng + 180) / 6.0) + 1)
+    utm_crs = f"+proj=utm +zone={utm_zone} +ellps=WGS84 +datum=WGS84 +units=m +no_defs"
+    
+    return utm_crs
 
 def extract_poly_coords(geom):
     # extract the coordinates of shapely polygons and multipolygons
