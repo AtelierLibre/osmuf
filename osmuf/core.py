@@ -28,17 +28,23 @@ def streets_blocks_buildings_from_graph(G, landuse_tags=None):
     '''
 
     '''
-    streets = streets_from_graph(G)
+    if landuse_tags is None:
+        landuse_tags = {'landuse':True,
+                        'amenity':True,
+                        'leisure':True,
+                        }
 
-    street_polygons = street_polygons_from_streets(streets)
+    streets = _streets_from_graph(G)
+
+    street_polygons = _street_polygons_from_streets(streets)
 
     street_polygons_union = street_polygons.unary_union
 
-    landuse = landuse_from_street_polygons(street_polygons_union, landuse_tags=landuse_tags)
+    landuse = _landuse_from_street_polygons(street_polygons_union, landuse_tags=landuse_tags)
 
-    buildings = buildings_from_street_polygons(street_polygons_union)
+    buildings = _buildings_from_street_polygons(street_polygons_union)
 
-    gross_blocks, net_blocks = blocks_from_streets_polygons_landuse(streets, street_polygons, landuse)
+    gross_blocks, net_blocks = _blocks_from_streets_polygons_landuse(streets, street_polygons, landuse)
 
     # join the block_id of the gross_block to the net_block, landuse and buildings
     net_blocks = gpd.sjoin(net_blocks, gross_blocks, how="left", op='intersects').drop(columns=['index_right'])
@@ -48,17 +54,16 @@ def streets_blocks_buildings_from_graph(G, landuse_tags=None):
     return streets, gross_blocks, net_blocks, landuse, buildings
 
 
-def streets_from_graph(G):
+def _streets_from_graph(G):
     # Make Graph undirected to remove duplicate edges
     G_undirected = G.to_undirected()
-
     # extract the edges as streets
     streets = ox.graph_to_gdfs(G_undirected, nodes=False)
 
     return streets
 
 
-def street_polygons_from_streets(streets):
+def _street_polygons_from_streets(streets):
     # polygonize the edges & create a new geodataframe
     polygons = list(polygonize(streets['geometry']))
     street_polygons = gpd.GeoDataFrame(geometry=polygons, crs=streets.crs)
@@ -66,13 +71,7 @@ def street_polygons_from_streets(streets):
     return street_polygons
 
 
-def landuse_from_street_polygons(street_polygons_union, landuse_tags):
-
-    if landuse_tags is None:
-        landuse_tags = {'landuse':True,
-                        'amenity':True,
-                        'leisure':True,
-                        }
+def _landuse_from_street_polygons(street_polygons_union, landuse_tags):
 
     landuse = ox.geometries_from_polygon(street_polygons_union, tags=landuse_tags)
     # filter to only retain polygonal geometry
@@ -81,7 +80,7 @@ def landuse_from_street_polygons(street_polygons_union, landuse_tags):
     return landuse
 
 
-def buildings_from_street_polygons(street_polygons_union):
+def _buildings_from_street_polygons(street_polygons_union):
     buildings = ox.geometries_from_polygon(street_polygons_union, tags={'building':True})
     # filter to retain only polygonal geometry
     buildings = buildings[buildings.geometry.geom_type.isin(['Polygon', 'MultiPolygon'])].copy()
@@ -89,7 +88,7 @@ def buildings_from_street_polygons(street_polygons_union):
     return buildings
 
 
-def blocks_from_streets_polygons_landuse(streets, street_polygons, landuse):
+def _blocks_from_streets_polygons_landuse(streets, street_polygons, landuse):
     
     landuse_polygons = gpd.GeoDataFrame(geometry=list(landuse.unary_union), crs=streets.crs)
 
@@ -168,6 +167,9 @@ def project_and_measure_streets_blocks_buildings(streets, gross_blocks, net_bloc
 
     # measure streets per gross block
     gross_blocks_prj = measure_streets_per_gross_block(gross_blocks_prj, streets_prj)
+
+    # measure land use
+    landuse_prj = measure_landuse(landuse_prj)
 
     # measure buildings
     buildings_prj = measure_buildings(buildings_prj)
@@ -268,6 +270,34 @@ def measure_streets_per_gross_block(gross_blocks_prj, streets_prj):
 
     return gross_blocks_prj
 
+def measure_landuse(landuse_prj):
+    """
+    Measure GeoDataFrame of landuse.
+
+    Keep only building height and area information. Generate measures of footprint size and total
+    Gross External Area (footprint x number of storeys).
+
+    Parameters
+    ----------
+    buildings_prj : geodataframe
+        gdf of buildings
+
+    Returns
+    -------
+    GeoDataFrame
+    """
+    # reduce columns of data
+    landuse_prj = landuse_prj[['geometry', 'unique_id', 'landuse', 'amenity', 'leisure', 'block_id']].copy()
+
+    landuse_prj['Combined land use'] = ''
+
+    for col in ['landuse', 'amenity', 'leisure']:
+        landuse_prj['Combined land use'] += landuse_prj[col].fillna('')
+ 
+    # generate footprint areas
+    landuse_prj['area_m2'] = landuse_prj.area.round(decimals=1)
+
+    return landuse_prj
 
 def measure_buildings(buildings_prj):
     """
@@ -332,6 +362,27 @@ def join_building_data_to_blocks(blocks_prj, buildings_prj):
     blocks_prj['avg_building:levels'] = (blocks_prj['total_GEA_m2']/blocks_prj['footprint_m2']).round(decimals=1)
 
     return blocks_prj
+
+def calculate_landuse_frontage(net_blocks_prj, landuse_prj):
+    """
+    Note: This currently doesn't handle areas of overlapping land use
+    """
+
+    # Create a GeoDataFrame of net block boundaries
+    net_block_boundaries = net_blocks_prj.copy()
+    net_block_boundaries['geometry'] = net_block_boundaries.boundary
+
+    # Create a GeoDataFrame of land use boundaries
+    landuse_boundaries_prj = landuse_prj.copy()
+    landuse_boundaries_prj['geometry'] = landuse_boundaries_prj['geometry'].boundary
+
+    # Create a GeoDataFrame of land use frontage lengths
+    landuse_frontage_prj = gpd.overlay(landuse_boundaries_prj, net_block_boundaries[['geometry']], how='intersection')
+
+    # Calculate the length of the frontages
+    landuse_frontage_prj['length_m'] = landuse_frontage_prj.length.round(1)
+
+    return landuse_frontage_prj
 
 ###################################################################################################3
 
@@ -618,7 +669,7 @@ def gen_building_depth(row):
     # get the id of the street nearest the building
     street_id = row.street_id
     # extract street geometry as shapely linestring
-    street_linestring = streets_proj.loc[street_id, 'geometry']
+    street_linestring = streets_prj.loc[street_id, 'geometry']
     # extract building centroid as shapely point
     building_centroid = row.geometry.centroid
     # distance along line to nearest point
