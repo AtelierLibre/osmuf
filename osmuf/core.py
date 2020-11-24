@@ -178,9 +178,9 @@ def project_and_measure_streets_blocks_buildings(streets, gross_blocks, net_bloc
     gross_blocks_prj = join_building_data_to_blocks(gross_blocks_prj, buildings_prj)
     net_blocks_prj = join_building_data_to_blocks(net_blocks_prj, buildings_prj)
 
-    # set the index to the block_id
-    gross_blocks_prj.set_index('block_id', drop=False, inplace=True, verify_integrity=True)
-    net_blocks_prj.set_index('block_id', drop=False, inplace=True, verify_integrity=True)
+    # set the index to the block_id column and remove the column
+    gross_blocks_prj.set_index('block_id', drop=True, inplace=True, verify_integrity=True)
+    net_blocks_prj.set_index('block_id', drop=True, inplace=True, verify_integrity=True)
 
     # calculate the block net:gross ratio
     gross_blocks_prj['block_net:gross'] = net_blocks_prj['area_m2']/gross_blocks_prj['area_m2']
