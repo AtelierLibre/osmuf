@@ -13,8 +13,8 @@ import networkx as nx
 import osmnx as ox
 from osmnx.utils_geo import bbox_from_point
 
-from shapely.geometry import Point, LineString, Polygon, MultiPolygon
-from shapely.ops import polygonize
+from shapely.geometry import Point, LineString, Polygon, MultiLineString, MultiPolygon
+from shapely.ops import polygonize, polylabel
 from shapely import wkt
 
 import matplotlib.pyplot as plt
@@ -23,18 +23,35 @@ from .utils import graph_to_polygons, extract_poly_coords, circlizer
 from .utils import dict_to_gdf, gdf_convex_hull, footprints_from_gdf
 from .utils import extend_line_by_factor
 
-
+# PUBLIC: Main function
 def streets_blocks_buildings_from_graph(G, landuse_tags=None):
     '''
+    Gets streets, blocks and buildings for the area of a OSMnx street network graph
 
+    Parameters
+    ==========
+    G : graph
+    
+    landuse_tags : dictionary
+        land use tags as specified in OSMnx
+
+    Returns
+    =======
+    streets : GDF
+    gross_blocks : GDF
+    net_blocks : GDF
+    landuse : GDF
+    buildings : GDF
     '''
     if landuse_tags is None:
         landuse_tags = {'landuse':True,
                         'amenity':True,
                         'leisure':True,
+                        'natural':True, # added for 'natural'='water'
+                        'power':True, # added for a solar power plant
                         }
 
-    streets = _streets_from_graph(G)
+    junctions, streets = _junctions_streets_from_graph(G)
 
     street_polygons = _street_polygons_from_streets(streets)
 
@@ -42,35 +59,61 @@ def streets_blocks_buildings_from_graph(G, landuse_tags=None):
 
     landuse = _landuse_from_street_polygons(street_polygons_union, landuse_tags=landuse_tags)
 
-    buildings = _buildings_from_street_polygons(street_polygons_union)
-
     gross_blocks, net_blocks = _blocks_from_streets_polygons_landuse(streets, street_polygons, landuse)
 
+    buildings = _buildings_from_gross_blocks(gross_blocks)
+
     # join the block_id of the gross_block to the net_block, landuse and buildings
-    net_blocks = gpd.sjoin(net_blocks, gross_blocks, how="left", op='intersects').drop(columns=['index_right'])
     landuse = gpd.sjoin(landuse, gross_blocks, how="left", op='intersects').drop(columns=['index_right'])
     buildings = gpd.sjoin(buildings, gross_blocks, how="left", op='intersects').drop(columns=['index_right'])
 
-    return streets, gross_blocks, net_blocks, landuse, buildings
+    return junctions, streets, gross_blocks, net_blocks, landuse, buildings
 
+# PRIVATE: Convert Graph to GDFs of junctions and streets
+def _junctions_streets_from_graph(G):
+    """
+    Converts an OSMnx street network graph to GDFs of junctions and streets
 
-def _streets_from_graph(G):
+    Parameters
+    ==========
+    G : graph
+
+    Returns
+    =======
+    streets : GDF
+
+    junctions : GDF
+    """
     # Make Graph undirected to remove duplicate edges
     G_undirected = G.to_undirected()
-    # extract the edges as streets
-    streets = ox.graph_to_gdfs(G_undirected, nodes=False)
+    # convert graph edges and nodes to GDFs of streets and junctions
+    junctions, streets = ox.graph_to_gdfs(G_undirected,)
 
-    return streets
+    return junctions, streets
 
-
+# PRIVATE: Polygonise the streets
 def _street_polygons_from_streets(streets):
+    """
+    Create polygons from the fragmented street edges
+
+    Parameters
+    ==========
+    streets : GDF
+        GDF of street fragments
+    street_polygons : GDF
+        GDF of polygons created from the street fragments
+        (may not be blocks if network type was walk)
+    """
     # polygonize the edges & create a new geodataframe
-    polygons = list(polygonize(streets['geometry']))
+    # polygons = list(polygonize(streets['geometry']))
+    # the added unary union forces the edges to be planar and all to
+    # intersect rather than pass over each other
+    polygons = list(polygonize(list(streets.unary_union)))
     street_polygons = gpd.GeoDataFrame(geometry=polygons, crs=streets.crs)
 
     return street_polygons
 
-
+# PRIVATE: Use OSMnx to get landuse polygons that intersect(?) the street polygons
 def _landuse_from_street_polygons(street_polygons_union, landuse_tags):
 
     landuse = ox.geometries_from_polygon(street_polygons_union, tags=landuse_tags)
@@ -79,82 +122,144 @@ def _landuse_from_street_polygons(street_polygons_union, landuse_tags):
 
     return landuse
 
-
-def _buildings_from_street_polygons(street_polygons_union):
-    buildings = ox.geometries_from_polygon(street_polygons_union, tags={'building':True})
-    # filter to retain only polygonal geometry
-    buildings = buildings[buildings.geometry.geom_type.isin(['Polygon', 'MultiPolygon'])].copy()
-
-    return buildings
-
-
+# PRIVATE: Create the gross and net blocks from street and landuse polygons
 def _blocks_from_streets_polygons_landuse(streets, street_polygons, landuse):
+    """
+    Creates gross and net blocks from street and landuse polygons
+
+    Creates a list of intersecting polygon ids from the street and landuse polygons.
+    Creates a network of edges between the ids that intersect. This allows polygons
+    in one layer that don't touch each other, but that do overlap a common polygon in
+    the other layer to be identified as belonging to the same group.
+
+    Any blocks whose net polygon is not contained by its equivalent gross polygon
+    are discarded.
+
+    Parameters
+    ==========
+    streets : GDF
+        GDF of streets, only used to get its CRS
+    street_polygons : GDF
+        GDF of street polygons
+    landuse : GDF
+        GDF of landuse polygons
+
+    Returns
+    =======
+    gross_blocks : GDF
+        GDF of gross blocks
+    net_blocks : GDF
+        GDF of net blocks
+    """
     
     landuse_polygons = gpd.GeoDataFrame(geometry=list(landuse.unary_union), crs=streets.crs)
 
-    # increase the landuse_polygons index numbers
+    # ensure that the landuse polygons index and street polygons indices don't overlap
     landuse_polygons.index = landuse_polygons.index + street_polygons.index.max()
 
+    # join the landuse polygons to the street polygons if they intersect
     gdf = gpd.sjoin(street_polygons,
                     landuse_polygons,
                     how="inner",
                     op='intersects')
 
+    # create a list of tuples for the indices that intersected
     tuple_list = list(zip(gdf.index.to_list(), gdf['index_right'].to_list()))
 
+    # create a NetworkX graph from the tuple list
     graph = nx.Graph(tuple_list)
+    # and identify the connected components
     result = list(nx.connected_components(graph))
 
     # dictionary of index:group
     d_ = dict()
-
     for i, idxs in enumerate(result):
         for idx in idxs:
             d_.update({idx:i})
-            
-    street_polygons['group'] = street_polygons.index.map(d_)
-    landuse_polygons['group'] = landuse_polygons.index.map(d_)
+    
+    # add the group id into a new column in the street and landuse polygons
+    street_polygons['block_id'] = street_polygons.index.map(d_)
+    landuse_polygons['block_id'] = landuse_polygons.index.map(d_)
 
-    gross_blocks = street_polygons.dissolve(by='group')
-    net_blocks = landuse_polygons.dissolve(by='group')
+    # dissolve the polygons together to form the gross and net blocks
+    gross_blocks = street_polygons.dissolve(by='block_id')
+    net_blocks = landuse_polygons.dissolve(by='block_id')
 
     # write the index number of each gross block into a column 'block_id'
-    gross_blocks['block_id'] = gross_blocks.index
+    #gross_blocks['block_id'] = gross_blocks.index
+    gross_blocks = gross_blocks.reset_index()
+    net_blocks = net_blocks.reset_index()
+    #net_blocks['block_id'] = net_blocks.index
+
+    # create a boolean filter True for net blocks contained within gross blocks
+    contained_filter = net_blocks.within(gross_blocks)
+    print(sum(~contained_filter), "non-contained blocks discarded.")
+    # apply the filter onto BOTH net and gross_blocks (assumes they are the same length)
+    net_blocks = net_blocks[contained_filter]
+    gross_blocks = gross_blocks[contained_filter]
 
     return gross_blocks, net_blocks
 
-
-def dissolve_gdf1_by_gdf2(gdf1, gdf2):
+# PRIVATE: Get buildings within polygonal geometries
+def _buildings_from_gross_blocks(gross_blocks):
     '''
-    dissolve together geometries in gdf1 that intersect a common shape in gdf2
-    '''
-    # adds the index of intersecting geometries in gdf2 to gdf1
-    gdf1 = gpd.sjoin(gdf1, gdf2, how="left", op='intersects')
+    Fetch buildings within the union of the gross blocks with OSMnx
 
-    # extract rows that received an index number and dissolve them together if they share the index
-    gdf1_dissolved = gdf1[gdf1['index_right'].notna()].dissolve(by='index_right')
+    Parameters
+    ==========
+    gross_blocks : GDF
+        GDF of polygon geometries to union together
     
-    # drop any duplicates
-    gdf1_dissolved = gdf1_dissolved[~gdf1_dissolved.index.duplicated(keep='first')].copy()
+    Returns
+    =======
+    buildings : GDF
+        GDF of (multi)polygon buildings from OSM
+    '''
+    # Union gross blocks into one (multi)polygon
+    gross_blocks_union = gross_blocks.unary_union
 
-    # extract rows that didn't receive an index number & drop that column
-    #gdf1_not_dissolved = gdf1[gdf1['index_right'].isna()].copy()
-    #gdf1_not_dissolved.drop(columns='index_right', inplace=True)
+    # Retrieve buildings from OSM with OSMnx
+    buildings = ox.geometries_from_polygon(gross_blocks_union, tags={'building':True})
 
-    # append the dissolved and non-dissolved
-    gdf = gdf1_dissolved#.append(gdf1_not_dissolved)
+    # filter to retain only polygonal geometries
+    buildings = buildings[buildings.geometry.geom_type.isin(['Polygon', 'MultiPolygon'])].copy()
 
-    gdf.reset_index(drop=True, inplace=True)
+    return buildings
 
-    return gdf
+# UNUSED?
+def dissolve_gdf1_by_gdf2(gdf1, gdf2):
+    print("dissolve_gdf1_by_gdf2 called")
+    #    '''
+    #    dissolve together geometries in gdf1 that intersect a common shape in gdf2
+    #    '''
+    #    # adds the index of intersecting geometries in gdf2 to gdf1
+    #    gdf1 = gpd.sjoin(gdf1, gdf2, how="left", op='intersects')
+    #
+    #    # extract rows that received an index number and dissolve them together if they share the index
+    #    gdf1_dissolved = gdf1[gdf1['index_right'].notna()].dissolve(by='index_right')
+    #    
+    #    # drop any duplicates
+    #    gdf1_dissolved = gdf1_dissolved[~gdf1_dissolved.index.duplicated(keep='first')].copy() 
+    #
+    #    # extract rows that didn't receive an index number & drop that column
+    #    #gdf1_not_dissolved = gdf1[gdf1['index_right'].isna()].copy()
+    #    #gdf1_not_dissolved.drop(columns='index_right', inplace=True)
+    #
+    #    # append the dissolved and non-dissolved
+    #    gdf = gdf1_dissolved#.append(gdf1_not_dissolved)
+    #
+    #    gdf.reset_index(drop=True, inplace=True)
+    #
+    #    return gdf
 
-
-def project_and_measure_streets_blocks_buildings(streets, gross_blocks, net_blocks, landuse, buildings, crs=None):
+# PUBLIC - is this necessary - can't this be private too?
+def project_and_measure_streets_blocks_buildings(junctions, streets, gross_blocks, net_blocks, landuse, buildings, crs=None):
     '''
     '''
     utm_crs = determine_utm_crs(streets)
 
     # project the GeoDataFrame to the UTM CRS
+    junctions_prj = junctions.to_crs(utm_crs)
     streets_prj = streets.to_crs(utm_crs)
     gross_blocks_prj = gross_blocks.to_crs(utm_crs)
     net_blocks_prj = net_blocks.to_crs(utm_crs)
@@ -183,11 +288,12 @@ def project_and_measure_streets_blocks_buildings(streets, gross_blocks, net_bloc
     net_blocks_prj.set_index('block_id', drop=True, inplace=True, verify_integrity=True)
 
     # calculate the block net:gross ratio
-    gross_blocks_prj['block_net:gross'] = net_blocks_prj['area_m2']/gross_blocks_prj['area_m2']
+    gross_blocks_prj['block_net:gross'] = net_blocks_prj.area/gross_blocks_prj.area
 
     print(f"Projected GeoDataFrame to {utm_crs}") #utils.log
 
-    return streets_prj, gross_blocks_prj, net_blocks_prj, landuse_prj, buildings_prj
+    return junctions_prj, streets_prj, gross_blocks_prj, net_blocks_prj, landuse_prj, buildings_prj
+
 
 def determine_utm_crs(gdf):
     # calculate longitude of centroid of union of all geometries in streets
@@ -216,9 +322,9 @@ def measure_blocks(gdf):
     # check if projected
 
     # basic block measurements
-    gdf['area_m2'] = gdf.area.round(decimals=2)
     gdf['perimeter_m'] = gdf.length.round(decimals=2)
-    gdf['PAR'] = (gdf.length/gdf.area).round(decimals=4)
+    gdf['area_m2'] = gdf.area.round(decimals=2)
+    gdf['PAR'] = (gdf.length/gdf.area).round(decimals=3)
 
     return gdf
 
@@ -269,13 +375,17 @@ def measure_streets_per_gross_block(gross_blocks_prj, streets_prj):
     # Fill NaN with zeroes
     gross_blocks_prj.fillna({'inner_streets_m':0, 'outer_streets_m':0, 'gross_area_ha':0}, inplace=True)
 
-    gross_blocks_prj['outer_streets_m'] = gross_blocks_prj.length.round(decimals=2)
+    # Calculate length of outer streets as 1/2 perimeter (i.e. shared with neighbouring block)
+    gross_blocks_prj['outer_streets_m'] = (gross_blocks_prj.length / 2).round(decimals=2)
+
     gross_blocks_prj['area_ha'] = (gross_blocks_prj.area/10000).round(decimals=4)
-    gross_blocks_prj['network_density_m_ha'] = (((gross_blocks_prj['outer_streets_m']/2)
-                                                      +(gross_blocks_prj['inner_streets_m']))
-                                                     /((gross_blocks_prj.area/10000))).round(decimals=2)
+
+    gross_blocks_prj['network_density_m_ha'] = ((gross_blocks_prj['outer_streets_m'] + 
+                                                 gross_blocks_prj['inner_streets_m']) /
+                                                (gross_blocks_prj.area/10000)).round(decimals=2)
 
     return gross_blocks_prj
+
 
 def measure_landuse(landuse_prj):
     """
@@ -293,18 +403,40 @@ def measure_landuse(landuse_prj):
     -------
     GeoDataFrame
     """
+    # columns that should always be present
+    base_columns = ['geometry', 'unique_id', 'block_id']
+    # land use columns that may be present
+    cols_present = {col for col in ['landuse', 'amenity', 'leisure', 'tourism'] if col in landuse_prj.columns}
+    # combine
+    base_columns.extend(cols_present)
     # reduce columns of data
-    landuse_prj = landuse_prj[['geometry', 'unique_id', 'landuse', 'amenity', 'leisure', 'block_id']].copy()
+    landuse_prj = landuse_prj[base_columns].copy()
 
+    # create a new column with empty string values
     landuse_prj['Combined land use'] = ''
 
-    for col in ['landuse', 'amenity', 'leisure']:
+    # create a single combined land use value from the values of all
+    # selected columns (e.g. amenity, landuse, leisure, tourism)
+    for col in cols_present:
         landuse_prj['Combined land use'] += landuse_prj[col].fillna('')
- 
+    
+    # determine whether (in very broad terms) the land is buildable or not
+    buildable_values = {'place_of_worship',
+                        'residential',
+                        'school',
+                        'retail',
+                        'religious',
+                        'post_office',
+                        'social_facility',
+                        'commercial',
+                    }
+    landuse_prj['Buildable'] = landuse_prj['Combined land use'].str.contains('|'.join(buildable_values))
+
     # generate footprint areas
     landuse_prj['area_m2'] = landuse_prj.area.round(decimals=1)
 
     return landuse_prj
+
 
 def measure_buildings(buildings_prj):
     """
@@ -338,6 +470,7 @@ def measure_buildings(buildings_prj):
 
     return buildings_prj
 
+
 def join_building_data_to_blocks(blocks_prj, buildings_prj):
     """
     Add summary building data onto blocks.
@@ -370,21 +503,64 @@ def join_building_data_to_blocks(blocks_prj, buildings_prj):
 
     return blocks_prj
 
+
 def calculate_landuse_frontage(net_blocks_prj, landuse_prj):
     """
     Note: This currently doesn't handle areas of overlapping land use
     """
+    # check that the net blocks are all Polygons or MultiPolygons & make a copy
+    assert(sum(~net_blocks_prj.geom_type.isin(['Polygon', 'MultiPolygon'])) == 0)
+    net_block_frontage = net_blocks_prj.copy()
 
-    # Create a GeoDataFrame of net block boundaries
-    net_block_boundaries = net_blocks_prj.copy()
-    net_block_boundaries['geometry'] = net_block_boundaries.boundary
+    #####
+    # This whole section should probably go on the Net Block creation in the first place #
+    #####
+    # Convert the Polygon geometries to their exteriors
+    filter_ps = net_block_frontage.geom_type == 'Polygon'
+    net_block_frontage.loc[filter_ps, 'geometry'] = net_block_frontage.loc[filter_ps,'geometry'].exterior
+
+    # Convert the MultiPolygon geometries to their exteriors
+    filter_mps = net_block_frontage.geom_type == 'MultiPolygon'
+    # The lamda function cycle through all Polygons in a MultiPolygon, gets only their exteriors
+    # and combines them into a MultiLineString
+    net_block_frontage.loc[filter_mps, 'geometry'] = net_block_frontage.loc[filter_mps,'geometry'].apply(lambda mp: MultiLineString([p.exterior for p in mp]))
+
+    # Check that the net block frontages are all LinearRings or MultiLineStrings
+    assert(sum(~net_block_frontage.geom_type.isin(['LinearRing', 'MultiLineString'])) == 0), str(net_block_frontage.geom_type.unique())
 
     # Create a GeoDataFrame of land use boundaries
+    # It may be worth running these boundaries through the same 'exterior' extraction
+    # Process as above?
     landuse_boundaries_prj = landuse_prj.copy()
-    landuse_boundaries_prj['geometry'] = landuse_boundaries_prj['geometry'].boundary
 
-    # Create a GeoDataFrame of land use frontage lengths
-    landuse_frontage_prj = gpd.overlay(landuse_boundaries_prj, net_block_boundaries[['geometry']], how='intersection')
+    # Convert the geometry to boundaries
+    landuse_boundaries_prj['geometry'] = landuse_boundaries_prj.boundary
+
+    # drop the area column if present
+    try:
+        landuse_boundaries_prj = landuse_boundaries_prj.drop("area_m2")
+    except:
+        pass
+
+    # Intersect the net_block_frontage boundaries with the net block frontages
+    # ¡Can still result in points if a land use meets a frontage with only its corner!
+    landuse_frontage_prj = gpd.overlay(landuse_boundaries_prj,
+                                       net_block_frontage[['geometry']],
+                                       how='intersection', # returns geometries contained by both GeoDataFrames
+                                       keep_geom_type=False, # Keeps all geometries even if type differs from original
+                                      )
+
+    # First get rid of any simple Point geometries
+    luf_filt_pt = landuse_frontage_prj.geom_type != 'Point'
+    landuse_frontage_prj = landuse_frontage_prj[luf_filt_pt].copy()
+
+    # Clean the land use frontage geometries, keeping only linear elements
+    # Extract linear geometries from GeometryCollections
+    filter_gc = landuse_frontage_prj.geom_type == 'GeometryCollection'
+    landuse_frontage_prj.loc[filter_gc, 'geometry'] = landuse_frontage_prj.loc[filter_gc, 'geometry'].apply(lambda gc: MultiLineString([ls for ls in gc if ls.geom_type in ['LineString', 'LinearRing']]))
+
+    # Check that all land use frontage geometries are linear
+    assert(sum(~landuse_frontage_prj.geom_type.isin(['LineString', 'LinearRing', 'MultiLineString'])) == 0), str(landuse_frontage_prj.geom_type.unique())
 
     # Calculate the length of the frontages
     landuse_frontage_prj['length_m'] = landuse_frontage_prj.length.round(1)
