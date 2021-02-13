@@ -151,8 +151,13 @@ def _blocks_from_streets_polygons_landuse(streets, street_polygons, landuse):
     net_blocks : GDF
         GDF of net blocks
     """
-    
+    # unary union all land use polygons
     landuse_polygons = gpd.GeoDataFrame(geometry=list(landuse.unary_union), crs=streets.crs)
+    # check they are all Polygons - because this is a unary union split into its constituent
+    # elements there shouldn't be any MultiPolygons
+    assert landuse_polygons.geom_type.isin(['Polygon']).all(), "land use unary union is not uniquely polygonal"
+    # keep only the exterior Polygon rings i.e. discard any holes
+    landuse_polygons.geometry = landuse_polygons.exterior.apply(Polygon)
 
     # ensure that the landuse polygons index and street polygons indices don't overlap
     landuse_polygons.index = landuse_polygons.index + street_polygons.index.max()
@@ -455,18 +460,24 @@ def measure_buildings(buildings_prj):
     GeoDataFrame
     """
     # reduce columns of data
-    buildings_prj = buildings_prj[['geometry', 'unique_id', 'building', 'building:levels', 'block_id']]
-
-    # fill NaN with zeroes
-    buildings_prj = buildings_prj.fillna({'building:levels': 0})
-
-    # convert 'building:levels' to float then Int64 (with Nan) one step is not possible
-    buildings_prj['building:levels']=buildings_prj['building:levels'].astype('float').astype('int')
- 
+    # not all areas have 'building:levels'
+    ideal_columns = {'geometry', 'unique_id', 'building', 'building:levels', 'block_id'}
+    actual_columns = set(buildings_prj.columns) & ideal_columns
+    buildings_prj = buildings_prj[list(actual_columns)]
+    
     # generate footprint areas
     buildings_prj['footprint_m2']=buildings_prj.area.round(decimals=1)
-    # generate total_GEA
-    buildings_prj['total_GEA_m2']=(buildings_prj.area*buildings_prj['building:levels']).round(decimals=1)
+
+    if 'building:levels' in buildings_prj.columns:
+        # fill NaN with zeroes
+        buildings_prj = buildings_prj.fillna({'building:levels': 0})
+
+        # convert 'building:levels' to float then Int64 (with Nan) one step is not possible
+        buildings_prj['building:levels']=buildings_prj['building:levels'].astype('float').astype('int')
+ 
+
+        # generate total_GEA
+        buildings_prj['total_GEA_m2']=(buildings_prj.area*buildings_prj['building:levels']).round(decimals=1)
 
     return buildings_prj
 
@@ -551,7 +562,7 @@ def calculate_landuse_frontage(net_blocks_prj, landuse_prj):
                                       )
 
     # First get rid of any simple Point geometries
-    luf_filt_pt = landuse_frontage_prj.geom_type != 'Point'
+    luf_filt_pt = ~landuse_frontage_prj.geom_type.isin(['Point', 'MultiPoint'])
     landuse_frontage_prj = landuse_frontage_prj[luf_filt_pt].copy()
 
     # Clean the land use frontage geometries, keeping only linear elements
